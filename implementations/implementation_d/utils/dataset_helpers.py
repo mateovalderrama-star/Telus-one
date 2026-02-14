@@ -32,7 +32,37 @@ def load_parquet_dataset(parquet_path: str):
     return ds_dict["train"]
 
 
-def build_judge_dataset(dataset, tag: str = "reward-bench"):
+def extract_qa(item, chosen_key, rejected_key, dataset_format: str):
+    """
+    Extract question and answers depending on dataset format.
+
+    dataset_format:
+        - "sky"  : structured chat format (list of dicts)
+        - "hh"   : raw string conversation format
+    """
+
+    if dataset_format == "sky":
+        question = item[chosen_key][0]["content"]
+        ans_chosen = item[chosen_key][-1]["content"]
+        ans_rejected = item[rejected_key][-1]["content"]
+
+    elif dataset_format == "hh":
+        def split_qa(text):
+            parts = text.split("Assistant:", 1)
+            human = parts[0].replace("Human:", "").strip()
+            assistant = parts[1].strip() if len(parts) > 1 else ""
+            return human, assistant
+
+        question, ans_chosen = split_qa(item[chosen_key])
+        _, ans_rejected = split_qa(item[rejected_key])
+
+    else:
+        raise ValueError("Unsupported dataset_format. Use 'sky' or 'hh'.")
+
+    return question, ans_chosen, ans_rejected
+
+
+def build_judge_dataset(dataset, dataset_format: str, tag: str = "reward-bench"):
     template = get_judge_template()
 
     new_data = {
@@ -54,9 +84,12 @@ def build_judge_dataset(dataset, tag: str = "reward-bench"):
             chosen_key, rejected_key = "rejected", "chosen"
             label = 2
 
-        question = item[chosen_key][0]["content"]
-        ans_1 = item[chosen_key][-1]["content"]
-        ans_2 = item[rejected_key][-1]["content"]
+        question, ans_1, ans_2 = extract_qa(
+            item,
+            chosen_key,
+            rejected_key,
+            dataset_format
+        )
 
         prompt = (
             template[0]
@@ -78,6 +111,7 @@ def build_judge_dataset(dataset, tag: str = "reward-bench"):
         idx += 1
 
     return Dataset.from_dict(new_data)
+
 
 
 def save_dataset(dataset: Dataset, save_dir: str):
