@@ -56,7 +56,7 @@ def score_answer_accuracy(expected: str, predicted: str, question_type: str) -> 
     exp_num = _to_number(exp)
     pred_num = _to_number(pred)
     if exp_num is not None and pred_num is not None:
-        if math.isclose(exp_num, pred_num, rel_tol=0.05, abs_tol=0.5):
+        if math.isclose(exp_num, pred_num, rel_tol=0.001, abs_tol=0.5): # tighter tolerance for chart QA, can adjust as needed
             return 1.0
 
     # MCQ substring check
@@ -86,8 +86,8 @@ def score_unanswerable(expected: str, predicted: str) -> Optional[float]:
 def evaluate_mep(
     mep: dict,
     use_judge: bool = True,
-    judge_backend: str = "openai",
-    judge_model: str = "gpt-4o",
+    judge_backend: str = "gemini",
+    judge_model: str = "gemini-2.5-flash-lite",
 ) -> dict:
     """Evaluate a single MEP and return a metrics dict."""
     sample = mep.get("sample", {})
@@ -179,9 +179,9 @@ def main() -> None:
         "--no_judge", action="store_true", help="Skip LLM judge (faster)"
     )
     parser.add_argument(
-        "--judge_backend", default="openai", choices=["openai", "gemini"]
+        "--judge_backend", default="gemini", choices=["openai", "gemini"]
     )
-    parser.add_argument("--judge_model", default="gpt-4o")
+    parser.add_argument("--judge_model", default="gemini-2.5-flash-lite")
     args = parser.parse_args()
 
     use_judge = not args.no_judge

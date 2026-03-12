@@ -72,8 +72,8 @@ class OcrReaderTool(BaseTool):
     )
     args_schema: Type[BaseModel] = OcrReaderInput
 
-    backend: str = "openai"
-    model: str = "gpt-4o"
+    backend: str = "gemini"
+    model: str = "gemini-2.5-flash-lite"
     api_key: str = ""
     opik_trace: Optional[Any] = None
 

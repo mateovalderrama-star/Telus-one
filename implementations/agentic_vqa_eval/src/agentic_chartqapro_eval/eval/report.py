@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import html
 import json
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -346,7 +347,7 @@ def _sample_table(rows: list, taxonomy_by_id: dict, max_rows: int = 100) -> str:
     has_tax = bool(taxonomy_by_id)
     has_judge = any("judge_explanation_quality" in r for r in rows)
 
-    html = '<div class="table-wrap"><table>'
+    out = '<div class="table-wrap"><table>'
     headers = ["Sample ID", "Type", "Expected", "Predicted", "Accuracy"]
     if has_ver:
         headers.append("Verifier")
@@ -354,7 +355,7 @@ def _sample_table(rows: list, taxonomy_by_id: dict, max_rows: int = 100) -> str:
         headers.append("Failure Type")
     if has_judge:
         headers.append("Judge Quality")
-    html += "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
+    out += "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
 
     for r in rows[:max_rows]:
         sid = html.escape(str(r.get("sample_id", "")))
@@ -379,12 +380,12 @@ def _sample_table(rows: list, taxonomy_by_id: dict, max_rows: int = 100) -> str:
             jq = r.get("judge_explanation_quality")
             row += f'<td class="{_acc_class(jq) if jq is not None else ""}">{f"{jq:.2f}" if jq is not None else "—"}</td>'
 
-        html += f"<tr>{row}</tr>"
+        out += f"<tr>{row}</tr>"
 
     if len(rows) > max_rows:
-        html += f'<tr><td colspan="{len(headers)}" style="text-align:center;color:#636e72;font-size:12px;">… {len(rows) - max_rows} more rows (run with larger display limit)</td></tr>'
-    html += "</table></div>"
-    return html
+        out += f'<tr><td colspan="{len(headers)}" style="text-align:center;color:#636e72;font-size:12px;">… {len(rows) - max_rows} more rows (run with larger display limit)</td></tr>'
+    out += "</table></div>"
+    return out
 
 
 # ---------------------------------------------------------------------------

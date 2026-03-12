@@ -114,10 +114,10 @@ class VisionAgent:
 
     def __init__(
         self,
-        agent_backend: str = "openai",
-        agent_model: str = "gpt-4o",
-        vision_backend: str = "openai",
-        vision_model: str = "gpt-4o",
+        agent_backend: str = "gemini",
+        agent_model: str = "gemini-2.5-flash-lite",
+        vision_backend: str = "gemini",
+        vision_model: str = "gemini-2.5-flash-lite",
         agent_api_key: Optional[str] = None,
         vision_api_key: Optional[str] = None,
     ):

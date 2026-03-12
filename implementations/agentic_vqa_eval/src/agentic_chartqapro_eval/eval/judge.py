@@ -78,8 +78,8 @@ def _call_llm(prompt: str, backend: str, model: str, api_key: Optional[str]) -> 
 
 def judge_mep(
     mep: dict,
-    backend: str = "openai",
-    model: str = "gpt-4o",
+    backend: str = "gemini",
+    model: str = "gemini-2.5-flash-lite",
     api_key: Optional[str] = None,
 ) -> dict:
     """Run LLM judge on a single MEP dict. Returns a scores dict."""

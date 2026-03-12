@@ -66,21 +66,21 @@ BACKEND_CONFIGS: dict = {
     },
     "gemini_gemini": {
         "planner_backend": "gemini",
-        "planner_model": "gemini-1.5-pro",
+        "planner_model": "gemini-2.5-flash-lite",
         "vision_backend": "gemini",
-        "vision_model": "gemini-1.5-pro",
+        "vision_model": "gemini-2.5-flash-lite",
         "judge_backend": "gemini",
     },
     "openai_gemini": {
         "planner_backend": "openai",
         "planner_model": "gpt-4o",
         "vision_backend": "gemini",
-        "vision_model": "gemini-1.5-pro",
+        "vision_model": "gemini-2.5-flash-lite",
         "judge_backend": "openai",
     },
     "gemini_openai": {
         "planner_backend": "gemini",
-        "planner_model": "gemini-1.5-pro",
+        "planner_model": "gemini-2.5-flash-lite",
         "vision_backend": "openai",
         "vision_model": "gpt-4o",
         "judge_backend": "gemini",
@@ -346,7 +346,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
     )
     parser.add_argument(
         "--config",
-        default="openai_openai",
+        default="gemini_gemini",
         choices=list(BACKEND_CONFIGS.keys()),
         help="Backend config preset",
     )

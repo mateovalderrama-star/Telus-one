@@ -21,6 +21,7 @@ dependencies = [
     "streamlit>=1.32",
     "jupyter",
     "ipykernel",
+    "google-genai>=1.66.0",
 ]
 
 [tool.setuptools.packages.find]

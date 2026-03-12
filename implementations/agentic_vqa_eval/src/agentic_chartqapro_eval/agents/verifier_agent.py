@@ -133,8 +133,8 @@ class VerifierAgent:
 
     def __init__(
         self,
-        backend: str = "openai",
-        model: str = "gpt-4o",
+        backend: str = "gemini",
+        model: str = "gemini-2.5-flash-lite",
         api_key: Optional[str] = None,
     ):
         self.backend = backend

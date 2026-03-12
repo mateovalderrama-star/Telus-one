@@ -250,17 +250,17 @@ Run on 25 test samples using GPT-4o for planner, vision, and verifier:
 python -m agentic_chartqapro_eval.runner.run_generate_meps \
     --split test \
     --n 25 \
-    --config openai_openai \
+    --config gemini_gemini \
     --workers 4 \
     --out meps/
 ```
 
-MEPs are written to `meps/openai_openai/chartqapro/test/<sample_id>.json`.
+MEPs are written to `meps/gemini_gemini/chartqapro/test/<sample_id>.json`.
 
 The **VerifierAgent (Pass 2.5)** runs automatically after the VisionAgent on every sample. To skip it (faster, lower cost):
 ```bash
 python -m agentic_chartqapro_eval.runner.run_generate_meps \
-    --split test --n 25 --config openai_openai --no_verifier
+    --split test --n 25 --config gemini_gemini --no_verifier
 ```
 
 **Available configs:** `openai_openai`, `gemini_gemini`, `openai_gemini`, `gemini_openai`
@@ -268,10 +268,10 @@ python -m agentic_chartqapro_eval.runner.run_generate_meps \
 **Model overrides** (e.g. to test different models without changing config):
 ```bash
 python -m agentic_chartqapro_eval.runner.run_generate_meps \
-    --split test --n 25 --config openai_openai \
-    --planner_model gpt-4o-mini \
-    --vision_model gpt-4o \
-    --verifier_model gpt-4o   # defaults to vision_model if omitted
+    --split test --n 25 --config gemini_gemini \
+    --planner_model gemini-2.5-flash-lite \
+    --vision_model gemini-2.5-flash-lite \
+    --verifier_model gemini-2.5-flash-lite   # defaults to vision_model if omitted
 ```
 
 #### OCR pre-reader (optional)
@@ -283,14 +283,14 @@ OCR is **enabled by default** and uses the same vision backend and model as the 
 To run with OCR using a cheaper model (recommended — OCR is simpler than full VQA):
 ```bash
 python -m agentic_chartqapro_eval.runner.run_generate_meps \
-    --split test --n 25 --config openai_openai \
-    --ocr_model gpt-4o-mini
+    --split test --n 25 --config gemini_gemini \
+    --ocr_model gemini-2.5-flash-lite
 ```
 
 To disable OCR entirely (matches the original pipeline behaviour, faster and lower cost):
 ```bash
 python -m agentic_chartqapro_eval.runner.run_generate_meps \
-    --split test --n 25 --config openai_openai --no_ocr
+    --split test --n 25 --config gemini_gemini --no_ocr
 ```
 
 When OCR is skipped, `"ocr": null` appears in the MEP and `"ocr_ms": 0.0` in timestamps — consistent with how `--no_verifier` behaves.
@@ -301,7 +301,7 @@ When OCR is skipped, `"ocr": null` appears in the MEP and `"ocr_ms": 0.0` in tim
 
 ```bash
 python -m agentic_chartqapro_eval.eval.eval_outputs \
-    --mep_dir meps/openai_openai/chartqapro/test \
+    --mep_dir meps/gemini_gemini/chartqapro/test \
     --out output/metrics.jsonl \
     --no_judge          # omit this flag to enable LLM judge (costs API calls)
 ```
@@ -318,7 +318,7 @@ The `predicted` column always reflects the **final answer** — the verifier's o
 
 ```bash
 python -m agentic_chartqapro_eval.eval.eval_traces \
-    --mep_dir meps/openai_openai/chartqapro/test \
+    --mep_dir meps/gemini_gemini/chartqapro/test \
     --out output/trace_metrics.jsonl
 ```
 
@@ -328,10 +328,10 @@ Re-queries the VLM for each MEP asking for the 3 most likely candidate answers:
 
 ```bash
 python -m agentic_chartqapro_eval.eval.eval_topk \
-    --mep_dir meps/openai_openai/chartqapro/test \
+    --mep_dir meps/gemini_gemini/chartqapro/test \
     --out output/topk_metrics.jsonl \
-    --backend openai \
-    --model gpt-4o \
+    --backend gemini \
+    --model gemini-2.5-flash-lite \
     --k 3
 ```
 
@@ -351,7 +351,7 @@ This pass asks **why** the agent was wrong, not just **that** it was wrong. A VL
 
 ```bash
 python -m agentic_chartqapro_eval.eval.error_taxonomy \
-    --mep_dir meps/openai_openai/chartqapro/test \
+    --mep_dir meps/gemini_gemini/chartqapro/test \
     --metrics_file output/metrics.jsonl \
     --out output/taxonomy.jsonl
 ```
@@ -646,7 +646,7 @@ No extra flags needed. When `OPIK_URL_OVERRIDE` is set, the pipeline automatical
 
 ```bash
 python -m agentic_chartqapro_eval.runner.run_generate_meps \
-    --split test --n 25 --config openai_openai --workers 4 --out meps/
+    --split test --n 25 --config gemini_gemini --workers 4 --out meps/
 ```
 
 ### 7. Attach evaluation scores
@@ -655,7 +655,7 @@ After running `eval_outputs.py`, accuracy and judge scores are automatically wri
 
 ```bash
 python -m agentic_chartqapro_eval.eval.eval_outputs \
-    --mep_dir meps/openai_openai/chartqapro/test \
+    --mep_dir meps/gemini_gemini/chartqapro/test \
     --out metrics.jsonl
 ```
 
@@ -665,7 +665,7 @@ If you have MEPs from runs before Opik was configured, import them without re-ru
 
 ```bash
 python -m agentic_chartqapro_eval.opik_integration.ingest \
-    --mep_dir meps/openai_openai/chartqapro/test \
+    --mep_dir meps/gemini_gemini/chartqapro/test \
     --metrics_file metrics.jsonl   # optional: attaches scores if available
 ```
 

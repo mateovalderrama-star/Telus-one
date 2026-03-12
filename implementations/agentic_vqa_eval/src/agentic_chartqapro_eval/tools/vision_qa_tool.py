@@ -46,8 +46,8 @@ class VisionQATool(BaseTool):
     args_schema: Type[BaseModel] = VisionQAInput
 
     # Public config fields
-    backend: str = "openai"  # "openai" | "gemini"
-    model: str = "gpt-4o"
+    backend: str = "gemini"  # "openai" | "gemini"
+    model: str = "gemini-2.5-flash-lite"
     api_key: str = ""
     opik_trace: Optional[Any] = None  # Opik Trace object for span creation
 

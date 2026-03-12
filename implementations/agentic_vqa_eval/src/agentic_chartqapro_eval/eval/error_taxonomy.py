@@ -145,8 +145,8 @@ def _call_vlm_gemini(
 def classify_failure(
     mep: dict,
     answer_accuracy: float,
-    backend: str = "openai",
-    model: str = "gpt-4o",
+    backend: str = "gemini",
+    model: str = "gemini-2.5-flash-lite",
     api_key: Optional[str] = None,
 ) -> dict:
     """Classify WHY the agent failed on this sample.
@@ -258,8 +258,8 @@ def main() -> None:  # noqa: PLR0915
         help="Optional metrics.jsonl from eval_outputs — used to look up answer_accuracy",
     )
     parser.add_argument("--out", default="taxonomy.jsonl", help="Output JSONL file")
-    parser.add_argument("--backend", default="openai", choices=["openai", "gemini"])
-    parser.add_argument("--model", default="gpt-4o")
+    parser.add_argument("--backend", default="gemini", choices=["openai", "gemini"])
+    parser.add_argument("--model", default="gemini-2.5-flash-lite")
     parser.add_argument(
         "--all",
         dest="classify_all",

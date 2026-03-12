@@ -119,8 +119,8 @@ def _call_gemini_topk(
 def get_topk_candidates(
     mep: dict,
     k: int = 3,
-    backend: str = "openai",
-    model: str = "gpt-4o",
+    backend: str = "gemini",
+    model: str = "gemini-2.5-flash-lite",
     api_key: Optional[str] = None,
 ) -> List[str]:
     """Call the VLM and return up to k candidate answers."""
@@ -174,8 +174,8 @@ def _hit_at_k(
 def evaluate_topk(
     mep: dict,
     k: int = 3,
-    backend: str = "openai",
-    model: str = "gpt-4o",
+    backend: str = "gemini",
+    model: str = "gemini-2.5-flash-lite",
     api_key: Optional[str] = None,
 ) -> dict:
     """Evaluate top-K answer candidates for a single MEP."""
@@ -215,8 +215,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Top-K answer candidate evaluation")
     parser.add_argument("--mep_dir", required=True)
     parser.add_argument("--out", default="topk_metrics.jsonl")
-    parser.add_argument("--backend", default="openai", choices=["openai", "gemini"])
-    parser.add_argument("--model", default="gpt-4o")
+    parser.add_argument("--backend", default="gemini", choices=["openai", "gemini"])
+    parser.add_argument("--model", default="gemini-2.5-flash-lite")
     parser.add_argument("--k", type=int, default=3)
     parser.add_argument("--n", type=int, default=None, help="Limit to first N MEPs")
     args = parser.parse_args()
