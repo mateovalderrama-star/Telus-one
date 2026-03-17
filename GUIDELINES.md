@@ -16,18 +16,18 @@ Manage environment variables using a `.env` file and access them in your code wi
 
 ## Utility Packages
 
-Place all common methods and classes used across implementations in a dedicated module at the repository root. Each package should have its own `pyproject.toml` specifying its details and dependencies. For example, this repository includes the `aieng-topic-impl` package.
+Place all common methods and classes used across implementations in a dedicated module at the repository root. Each package should have its own `pyproject.toml` specifying its details and dependencies. For example, this repository includes the `aieng-llm-interp` package.
 
 If your repository contains multiple packages, link each one in the main `pyproject.toml` as shown below to ensure they are built and linked for local development:
 
 ```toml
 [tool.uv.workspace]
 members = [
-  "aieng-topic-impl",
+  "aieng-llm-interp",
 ]
 
 [tool.uv.sources]
-aieng-topic-impl = { workspace = true }
+aieng-llm-interp = { workspace = true }
 ```
 
 When testing packages, use pre-release versions (e.g., v0.1.0a1, v0.1.0a2, v0.1.0b1). After testing, update to a release version (e.g., v1.0.0) before publishing. Follow the [official versioning scheme](https://packaging.python.org/en/latest/discussions/versioning/).
@@ -50,7 +50,7 @@ import os
 if "COLAB_RELEASE_TAG" in os.environ:
     # Running in Google Colab
     # Install required dependencies
-    !pip3 install numpy==1.26.4 torchvision==0.16.2 aieng-topic-impl
+    !pip3 install numpy==1.26.4 torchvision==0.16.2 aieng-llm-interp
     # Uninstall conflicting dependencies
     !pip3 uninstall --yes torchao torchaudio torchdata torchsummary torchtune
 ```

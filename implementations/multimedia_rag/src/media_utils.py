@@ -5,14 +5,18 @@ import subprocess
 
 
 def get_duration(file_path):
-    """Get the duration of a media file using ffprobe.
+    """
+    Calculate the duration of a media file.
 
-    Args:
-        file_path (str): Path to the media file.
+    Parameters
+    ----------
+    file_path : str
+        The path to the video or audio file.
 
     Returns
     -------
-        float: Duration of the media file in seconds.
+    float
+        The duration of the file in seconds.
     """
     result = subprocess.run(
         [
@@ -34,7 +38,23 @@ def get_duration(file_path):
 
 
 def list_video_durations(folder_path, threshold_seconds=300):
-    """List video durations in a folder and report files below the threshold."""
+    """
+    Scan a folder and summarize the durations of all video files.
+
+    It lists all videos and highlights those that fall below a specific
+    time threshold.
+
+    Parameters
+    ----------
+    folder_path : str
+        The directory containing video files.
+    threshold_seconds : int, default 300
+        The duration limit in seconds for identifying short videos.
+
+    Returns
+    -------
+    None
+    """
     video_extensions = (".mp4", ".mov", ".avi", ".mkv", ".flv", ".wmv", ".m4a", ".webm")
 
     durations = {}
@@ -63,9 +83,7 @@ def list_video_durations(folder_path, threshold_seconds=300):
 
     if total_videos > 0:
         percentage = (len(below_threshold_files) / total_videos) * 100
-        print(
-            f"\n{percentage:.2f}% of videos are less than {threshold_seconds} seconds."
-        )
+        print(f"\n{percentage:.2f}% of videos are less than {threshold_seconds} seconds.")
 
         if below_threshold_files:
             print("\nFiles below threshold (sorted by duration):")
@@ -79,17 +97,23 @@ def list_video_durations(folder_path, threshold_seconds=300):
 
 def process_video(video_dir, process_dir, max_time=60):
     """
-    Process video files in the specified directory using ffmpeg.
+    Standardize video files in a directory to a consistent format.
 
-    This function converts video files to a standardized format (H.264 for
-    video and AAC for audio) while preserving the original quality as much
-    as possible.
+    Uses ffmpeg to copy video streams into a standardized container.
+    Videos exceeding the duration limit are skipped.
 
-    Args:
-        video_dir (str): Path to the directory containing video files to be
-            processed.
-        process_dir (str): Path to the output directory for processed files.
-        max_time (int): Maximum duration in seconds; longer files are skipped.
+    Parameters
+    ----------
+    video_dir : str
+        Directory containing the source video files.
+    process_dir : str
+        Directory where the processed videos will be saved.
+    max_time : int, default 60
+        The maximum allowed duration in seconds.
+
+    Returns
+    -------
+    None
     """
     # Define supported video formats
     video_extensions = (".mp4", ".mov", ".avi", ".mkv", ".webm")
@@ -125,16 +149,23 @@ def process_video(video_dir, process_dir, max_time=60):
 
 def process_audio(audio_dir, process_dir, max_time=60.00000):
     """
-    Process audio files in the specified directory using ffmpeg.
+    Convert audio files from M4A to a standardized WAV format.
 
-    This function converts M4A audio files to WAV format with PCM encoding,
-    which is a common format for audio processing tasks.
+    Uses ffmpeg to perform the conversion with PCM encoding.
+    Files exceeding the duration limit are skipped.
 
-    Args:
-        audio_dir (str): Path to the directory containing audio files to be
-            processed.
-        process_dir (str): Path to the output directory for processed files.
-        max_time (float): Maximum duration in seconds; longer files are skipped.
+    Parameters
+    ----------
+    audio_dir : str
+        Directory containing the source M4A audio files.
+    process_dir : str
+        Directory where the converted WAV files will be saved.
+    max_time : float, default 60.0
+        The maximum allowed duration in seconds.
+
+    Returns
+    -------
+    None
     """
     output_dir = process_dir
     os.makedirs(output_dir, exist_ok=True)

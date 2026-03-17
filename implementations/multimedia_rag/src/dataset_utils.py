@@ -5,14 +5,18 @@ import os
 
 
 def extract_id(filename):
-    """Convert a filename to a base ID.
+    """
+    Clean a filename to create a consistent identifier.
 
-    Removes the file extension and replaces double underscores with a single underscore.
+    Parameters
+    ----------
+    filename : str
+        The original filename string.
 
-    Convert::
-
-        002.mp4        -> 002
-        002__000.mp4   -> 002_000
+    Returns
+    -------
+    str
+        The cleaned identifier without extension and with standardized underscores.
     """
     base = os.path.splitext(filename)[0]  # remove extension
     return base.replace("__", "_")
@@ -22,25 +26,29 @@ def check_dataset_integrity(  # noqa: PLR0912
     root_path, vid_dir="video", aud_dir="audio", cap_dir="caption"
 ):
     """
-    Check the integrity of the dataset.
+    Validate that every sample has its corresponding media and text files.
 
-    It verifies that for each unique ID (derived from filenames),
-    there is a corresponding video, audio, and caption file.
-    It reports any mismatches and provides a summary of the integrity
-    check for each folder.
+    Scans the dataset layout and identifies any missing triplets
+    (video, audio, and caption) for each content ID.
 
     Parameters
     ----------
-    - root_path (str): The root directory containing topic folders.
-    - vid_dir (str): Subdirectory name for videos (default: "video").
-    - aud_dir (str): Subdirectory name for audios (default: "audio").
-    - cap_dir (str): Subdirectory name for captions (default: "caption").
+    root_path : str
+        The directory containing the topic folders.
+    vid_dir : str, default "video"
+        Name of the subfolder containing video files.
+    aud_dir : str, default "audio"
+        Name of the subfolder containing audio files.
+    cap_dir : str, default "caption"
+        Name of the subfolder containing caption files.
+
+    Returns
+    -------
+    None
     """
     # List all main folders in the root directory, excluding hidden ones.
     main_folders = [
-        f
-        for f in os.listdir(root_path)
-        if os.path.isdir(os.path.join(root_path, f)) and not f.startswith(".")
+        f for f in os.listdir(root_path) if os.path.isdir(os.path.join(root_path, f)) and not f.startswith(".")
     ]
 
     # Iterate through each folder and check its contents.
@@ -96,12 +104,7 @@ def check_dataset_integrity(  # noqa: PLR0912
                 matched_count += 1  # Increment matched triplet count.
             else:
                 mismatch_count += 1  # Increment mismatch count.
-                print(
-                    f"  ID {id_}: "
-                    f"video={has_video}, "
-                    f"audio={has_audio}, "
-                    f"caption={has_caption}"
-                )
+                print(f"  ID {id_}: video={has_video}, audio={has_audio}, caption={has_caption}")
 
         # Print summary of the integrity check for the current folder.
         print(f"  Total unique IDs: {len(all_ids)}")
@@ -115,17 +118,19 @@ def check_dataset_integrity(  # noqa: PLR0912
 
 def extract_video_number(filename):
     """
-    Extract the base numeric video ID from a filename.
+    Extract the numeric video ID from a filename string.
 
-    Extract base numeric video ID from filenames like:
-        002.mp4
-        video_002.mp4
-        002__000.mp4
-        video_002__000.mp4
+    Handles various formats including prefixes and segmentation IDs.
+
+    Parameters
+    ----------
+    filename : str
+        The media filename to parse.
 
     Returns
     -------
-        '002' or None
+    str or None
+        The numeric representation as a string if found, otherwise None.
     """
     base = os.path.splitext(filename)[0]
 
@@ -141,18 +146,23 @@ def extract_video_number(filename):
 
 def filter_json_by_existing_videos(json_path, video_folder, output_path=None):
     """
-    Filter a JSON file to include only entries corresponding to existing video files.
+    Synchronize a JSON dataset with the actual files on disk.
+
+    Removes any questions or metadata entries from the JSON list if the
+    corresponding video file is missing from the specified folder.
 
     Parameters
     ----------
-    - json_path (str): Path to the input JSON file.
-    - video_folder (str): Path to the folder containing video files.
-    - output_path (str, optional): Path to save the filtered JSON file.
-      If None, the filtered JSON is not saved.
+    json_path : str
+        Path to the source JSON dataset.
+    video_folder : str
+        Directory to check for existing video files.
+    output_path : str, optional
+        Target path for the filtered JSON output.
 
     Returns
     -------
-    - None
+    None
     """
     # Load JSON data from the specified file
     with open(json_path, "r") as f:
@@ -170,9 +180,7 @@ def filter_json_by_existing_videos(json_path, video_folder, output_path=None):
     # Filter entries in the JSON file to include only those with matching video numbers
     original_count = len(data.get("entries", []))
     filtered_entries = [
-        entry
-        for entry in data.get("entries", [])
-        if entry.get("video_number") in available_video_numbers
+        entry for entry in data.get("entries", []) if entry.get("video_number") in available_video_numbers
     ]
     filtered_count = len(filtered_entries)
 
@@ -195,15 +203,17 @@ def filter_json_by_existing_videos(json_path, video_folder, output_path=None):
 
 def simplify_mcq_json(data):
     """
-    Simplify a JSON structure containing multiple-choice questions (MCQs).
+    Extract a cleaner, flatter version of MCQ data from a raw JSON.
 
     Parameters
     ----------
-    - data (dict): The input JSON data containing MCQ entries.
+    data : dict
+        The raw dataset dictionary.
 
     Returns
     -------
-    - list: A list of simplified MCQ entries, each represented as a dictionary.
+    list of dict
+        A list of entries containing only the most important fields for evaluation.
     """
     simplified_entries = []
 
@@ -216,9 +226,7 @@ def simplify_mcq_json(data):
 
         # Determine the correct answer text based on the answer index
         correct_answer_text = (
-            options[answer_index]
-            if isinstance(answer_index, int) and answer_index < len(options)
-            else None
+            options[answer_index] if isinstance(answer_index, int) and answer_index < len(options) else None
         )
 
         # Create a simplified representation of the MCQ entry
@@ -229,16 +237,10 @@ def simplify_mcq_json(data):
             "question": entry.get("question"),  # The question text
             "options": options,  # List of answer options
             "answer_index": answer_index,  # Index of the correct answer
-            "answer_letter": entry.get(
-                "answer_letter"
-            ),  # Letter of the selected answer
-            "correct_answer_letter": entry.get(
-                "answer_letter"
-            ),  # Letter of the correct answer
+            "answer_letter": entry.get("answer_letter"),  # Letter of the selected answer
+            "correct_answer_letter": entry.get("answer_letter"),  # Letter of the correct answer
             "correct_answer_text": correct_answer_text,  # Text of the correct answer
-            "rationale": entry.get(
-                "rationale"
-            ),  # Explanation or rationale for the answer
+            "rationale": entry.get("rationale"),  # Explanation or rationale for the answer
         }
 
         # Add the simplified entry to the result list
@@ -249,13 +251,16 @@ def simplify_mcq_json(data):
 
 def rename_media_files(parent_dir: str):
     """
-    Rename media files in the specified parent directory to a simplified format.
+    Remove verbose prefixes from media filenames in a directory.
 
-    Rename files like:
-        video_002.mp4  -> 002.mp4
-        audio_002.m4a  -> 002.m4a
-        caption_002.srt -> 002.srt
-    Keeps original numbering and extension.
+    Parameters
+    ----------
+    parent_dir : str
+        The topic folder containing 'video', 'audio', and 'caption' subdirectories.
+
+    Returns
+    -------
+    None
     """
 
     def rename_in_folder(folder, prefix):
@@ -291,15 +296,17 @@ def rename_media_files(parent_dir: str):
 
 def srt_time_to_seconds(t):
     """
-    Convert an SRT timestamp (HH:MM:SS,mmm) to seconds (float).
+    Convert a standard SRT timestamp string to a numeric second value.
 
     Parameters
     ----------
-    - t (str): Timestamp in the format HH:MM:SS,mmm.
+    t : str
+        Timestamp in 'HH:MM:SS,mmm' format.
 
     Returns
     -------
-    - float: Time in seconds.
+    float
+        The absolute time in seconds.
     """
     hms, ms = t.split(",")  # Split into hours:minutes:seconds and milliseconds.
     h, m, s = hms.split(":")  # Extract hours, minutes, and seconds.
@@ -313,18 +320,17 @@ def srt_time_to_seconds(t):
 
 def parse_srt_with_timestamps(srt_path):
     """
-    Parse an SRT file and extract entries with timestamps and text.
+    Read an SRT file and convert it into structured data objects.
 
     Parameters
     ----------
-    - srt_path (str): Path to the SRT file.
+    srt_path : str
+        Path to the subtitle file.
 
     Returns
     -------
-    - list: A list of dictionaries, each containing:
-        - 'start' (float): Start time in seconds.
-        - 'end' (float): End time in seconds.
-        - 'text' (str): Subtitle text.
+    list of dict
+        Entries containing 'start', 'end', and 'text' as parsed keys.
     """
     entries = []
 
@@ -354,15 +360,17 @@ def parse_srt_with_timestamps(srt_path):
 
 def seconds_to_srt(seconds):
     """
-    Convert seconds (float) to an SRT timestamp (HH:MM:SS,mmm).
+    Convert a numeric second value into a formatted SRT timestamp.
 
     Parameters
     ----------
-    - seconds (float): Time in seconds.
+    seconds : float
+        The time in seconds to format.
 
     Returns
     -------
-    - str: Timestamp in the format HH:MM:SS,mmm.
+    str
+        The formatted 'HH:MM:SS,mmm' string.
     """
     ms = int((seconds - int(seconds)) * 1000)  # Extract milliseconds.
     s = int(seconds)  # Extract whole seconds.

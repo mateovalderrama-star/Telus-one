@@ -1,7 +1,7 @@
 r"""Runner: generate Model Evaluation Packets (MEPs) for ChartQAPro.
 
 Usage:
-    python -m agentic_chartqapro_eval.runner.run_generate_meps \\
+    uv run --env-file .env -m agentic_chartqapro_eval.runner.run_generate_meps \\
         --dataset chartqapro \\
         --split test \\
         --n 200 \\
@@ -118,9 +118,37 @@ def process_sample(  # noqa: PLR0915
     verifier_agent: Optional[VerifierAgent] = None,
     ocr_tool: Optional[OcrReaderTool] = None,
 ) -> str:
-    """Run Plan → [OCR] → Vision → [Verifier] → MEP pipeline.
+    """
+    Execute the multi-stage evaluation pipeline for a single sample.
 
-    Returns the path of the written MEP file.
+    Coordinates the planner, optional OCR tool, vision agent, and
+    optional verifier to produce a Model Evaluation Packet (MEP).
+
+    Parameters
+    ----------
+    sample : PerceivedSample
+        The data sample containing the question and chart image.
+    planner : PlannerAgent
+        The agent responsible for generating the inspection plan.
+    vision_agent : VisionAgent
+        The agent that performs visual analysis.
+    config : dict
+        Configuration dictionary for backends and models.
+    run_id : str
+        Unique identifier for the current evaluation run.
+    out_dir : str
+        Directory where the resulting MEP JSON should be saved.
+    opik_client : object, optional
+        The Opik client for tracing.
+    verifier_agent : VerifierAgent, optional
+        The agent for pass 2.5 verification.
+    ocr_tool : OcrReaderTool, optional
+        Tool for pre-extracting text from the chart.
+
+    Returns
+    -------
+    str
+        The absolute path to the written MEP file.
     """
     config_name = f"{config['planner_backend']}_{config['vision_backend']}"
     run_start = iso_now()
@@ -146,9 +174,7 @@ def process_sample(  # noqa: PLR0915
 
         try:
             with timed() as pt:
-                plan_prompt, plan_parsed, plan_parse_error, plan_raw = planner.run(
-                    sample, opik_trace=opik_trace
-                )
+                plan_prompt, plan_parsed, plan_parse_error, plan_raw = planner.run(sample, opik_trace=opik_trace)
             plan_ms = pt.elapsed_ms
         except Exception as exc:
             errors.append(f"planner_error: {exc}")
@@ -171,9 +197,7 @@ def process_sample(  # noqa: PLR0915
                     ocr_raw = ocr_tool._run(sample.image_path)
                 ocr_ms = ot.elapsed_ms
                 ocr_traces = ocr_tool.pop_traces()
-                ocr_parsed, ocr_ok = parse_strict(
-                    ocr_raw, required_keys=["chart_type", "title"]
-                )
+                ocr_parsed, ocr_ok = parse_strict(ocr_raw, required_keys=["chart_type", "title"])
                 ocr_parse_error = not ocr_ok
                 if not ocr_parsed:
                     ocr_parsed = {}
@@ -227,9 +251,7 @@ def process_sample(  # noqa: PLR0915
                         verifier_parsed,
                         verifier_parse_error,
                         verifier_raw,
-                    ) = verifier_agent.run(
-                        sample, plan_parsed, vision_parsed, opik_trace=opik_trace
-                    )
+                    ) = verifier_agent.run(sample, plan_parsed, vision_parsed, opik_trace=opik_trace)
                 verifier_ms = vrt.elapsed_ms
                 verifier_verdict = verifier_parsed.get("verdict", "confirmed")
             except Exception as exc:
@@ -333,7 +355,16 @@ def process_sample(  # noqa: PLR0915
 
 
 def main() -> None:  # noqa: PLR0912, PLR0915
-    """Parse CLI arguments and run the MEP generation pipeline."""
+    """
+    Parse CLI arguments and run the MEP generation pipeline.
+
+    Configures agents, loads the dataset, and manages parallel execution
+    of the evaluation pipeline.
+
+    Returns
+    -------
+    None
+    """
     parser = argparse.ArgumentParser(description="Generate MEPs for ChartQAPro")
     parser.add_argument(
         "--dataset",
@@ -341,27 +372,21 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         help="Dataset name (currently only chartqapro)",
     )
     parser.add_argument("--split", default="test", help="Dataset split")
-    parser.add_argument(
-        "--n", type=int, default=10, help="Number of samples to process"
-    )
+    parser.add_argument("--n", type=int, default=10, help="Number of samples to process")
     parser.add_argument(
         "--config",
         default="gemini_gemini",
         choices=list(BACKEND_CONFIGS.keys()),
         help="Backend config preset",
     )
-    parser.add_argument(
-        "--workers", type=int, default=1, help="Parallel workers (1 = sequential)"
-    )
+    parser.add_argument("--workers", type=int, default=1, help="Parallel workers (1 = sequential)")
     parser.add_argument("--out", default="meps/", help="Output directory for MEPs")
     parser.add_argument(
         "--image_dir",
         default="data/chartqapro_images",
         help="Directory to save/load chart images",
     )
-    parser.add_argument(
-        "--cache_dir", default=None, help="HuggingFace datasets cache dir"
-    )
+    parser.add_argument("--cache_dir", default=None, help="HuggingFace datasets cache dir")
     parser.add_argument(
         "--planner_model",
         default=None,
@@ -377,9 +402,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         default=None,
         help="Override verifier model (defaults to vision_model)",
     )
-    parser.add_argument(
-        "--no_verifier", action="store_true", help="Skip Pass 2.5 verifier agent"
-    )
+    parser.add_argument("--no_verifier", action="store_true", help="Skip Pass 2.5 verifier agent")
     parser.add_argument("--no_ocr", action="store_true", help="Skip OCR pre-read step")
     parser.add_argument(
         "--ocr_model",
@@ -395,10 +418,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         config["vision_model"] = args.vision_model
     run_id = str(uuid.uuid4())
     out_dir = str(
-        Path(args.out)
-        / f"{config['planner_backend']}_{config['vision_backend']}"
-        / "chartqapro"
-        / args.split
+        Path(args.out) / f"{config['planner_backend']}_{config['vision_backend']}" / "chartqapro" / args.split
     )
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
@@ -425,9 +445,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
 
     # Build agents once — run() creates fresh Crew/Tool per call so this is thread-safe
     print("Initialising agents …")
-    planner = PlannerAgent(
-        backend=config["planner_backend"], model=config["planner_model"]
-    )
+    planner = PlannerAgent(backend=config["planner_backend"], model=config["planner_model"])
     vision_agent = VisionAgent(
         agent_backend=config["planner_backend"],
         agent_model=config["planner_model"],
@@ -438,9 +456,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
     if not args.no_verifier:
         verifier_model = args.verifier_model or config["vision_model"]
         verifier = VerifierAgent(backend=config["vision_backend"], model=verifier_model)
-        print(
-            f"Verifier         : enabled ({config['vision_backend']} / {verifier_model})"
-        )
+        print(f"Verifier         : enabled ({config['vision_backend']} / {verifier_model})")
     else:
         print("Verifier         : disabled (--no_verifier)")
 

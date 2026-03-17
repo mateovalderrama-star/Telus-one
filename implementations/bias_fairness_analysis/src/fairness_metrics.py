@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """Compute group fairness metrics across demographic identities.
 
 Calculates per-identity fairness metrics and summary statistics:
@@ -38,23 +36,51 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 
 def load_df(path: str) -> pd.DataFrame:
-    """Load DataFrame from Parquet or CSV file."""
+    """
+    Load a pandas DataFrame from a Parquet or CSV file.
+
+    If a Parquet file is provided, the function attempts to use an available
+    engine like pyarrow or fastparquet. If no engine is found, it warns the
+    user and falls back to CSV reading.
+
+    Parameters
+    ----------
+    path : str
+        The file path to load. Supports .parquet and .csv.
+
+    Returns
+    -------
+    pd.DataFrame
+        The loaded dataset.
+    """
     if path.endswith(".parquet"):
-        if importlib.util.find_spec("pyarrow") or importlib.util.find_spec(
-            "fastparquet"
-        ):
+        if importlib.util.find_spec("pyarrow") or importlib.util.find_spec("fastparquet"):
             return pd.read_parquet(path)
         print("[warn] No parquet engine; attempting CSV fallback…")
     return pd.read_csv(path)
 
 
-def binarize_labels(
-    y: Any, positive_label: int = 1, threshold: float = 0.5
-) -> np.ndarray[Any, np.dtype[np.int_]]:
-    """Binarize labels to 0/1.
+def binarize_labels(y: Any, positive_label: int = 1, threshold: float = 0.5) -> np.ndarray[Any, np.dtype[np.int_]]:
+    """
+    Binarize input labels or probabilities into a 0/1 integer format.
 
-    Accept 0/1 ints or floats in [0,1]. If values are not {0,1},
-    threshold at specified value and map to {0,1} where 1 means positive.
+    This is used to prepare data for fairness metric calculations. It handles
+    both binary integer labels and continuous probability values.
+
+    Parameters
+    ----------
+    y : Any
+        The labels or probabilities to binarize.
+    positive_label : int, default 1
+        The value to be treated as the 'positive' class. If this is 0,
+        the binary results are inverted.
+    threshold : float, default 0.5
+        The cutoff value for probabilities. Values >= threshold are mapped to 1.
+
+    Returns
+    -------
+    np.ndarray
+        An array of binarized labels (0s and 1s).
     """
     y = pd.Series(y)
     # if already integers 0/1, just map to 0/1 respecting positive_label
@@ -71,7 +97,25 @@ def metrics_for_group(
     y_true: np.ndarray[Any, np.dtype[np.int_]],
     y_pred: np.ndarray[Any, np.dtype[np.int_]],
 ) -> dict[str, float]:
-    """Compute classification metrics for a group."""
+    """
+    Compute standard classification metrics for a specific group.
+
+    Calculates accuracy, F1 score, True Positive Rate (TPR), False Positive Rate (FPR),
+    and the positive prediction rate.
+
+    Parameters
+    ----------
+    y_true : np.ndarray
+        Binarized ground truth labels.
+    y_pred : np.ndarray
+        Binarized model predictions.
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary of metric names mapped to their computed values. Includes:
+        'acc', 'f1', 'tpr', 'false_positive_rate', and 'pos_rate'.
+    """
     acc = accuracy_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred, zero_division=0)
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
@@ -88,7 +132,14 @@ def metrics_for_group(
 
 
 def main() -> None:  # noqa: PLR0912, PLR0915
-    """Compute and save fairness metrics for predictions."""
+    """
+    Orchestrate the calculation and reporting of group fairness metrics.
+
+    This function handles command-line arguments to load predictions and labels,
+    aligns them by index, and iterates through specified demographic columns
+    to compute disparities like Statistical Parity Difference (SPD) and
+    Equal Opportunity (EOpp) difference. Results are saved to CSV.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--preds",
@@ -131,9 +182,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         raise SystemExit(f"Label column '{args.label_col}' not found after merge.")
 
     # Prepare y_true / y_pred
-    y_true = binarize_labels(
-        df[args.label_col], positive_label=args.positive_label, threshold=0.5
-    )
+    y_true = binarize_labels(df[args.label_col], positive_label=args.positive_label, threshold=0.5)
     if "pred" not in df.columns:
         raise SystemExit("Missing 'pred' column in preds; compute preds first.")
     y_pred = df["pred"].astype(int).values
@@ -146,9 +195,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             continue
 
         # membership: treat >0 as 1, NaN→0
-        identity_mask = (
-            (pd.to_numeric(df[a], errors="coerce").fillna(0) > 0).astype(int).values
-        )
+        identity_mask = (pd.to_numeric(df[a], errors="coerce").fillna(0) > 0).astype(int).values
 
         # Identity=0 and Identity=1 slices
         rep_rows = []
@@ -156,14 +203,10 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             mask = val == identity_mask
             n = int(mask.sum())
             if n < args.min_group_size:
-                rep_rows.append(
-                    {"identity": a, "group": f"{a}={val}", "n": n, "skipped": True}
-                )
+                rep_rows.append({"identity": a, "group": f"{a}={val}", "n": n, "skipped": True})
                 continue
             m = metrics_for_group(y_true[mask], y_pred[mask])
-            rep_rows.append(
-                {"identity": a, "group": f"{a}={val}", "n": n, "skipped": False, **m}
-            )
+            rep_rows.append({"identity": a, "group": f"{a}={val}", "n": n, "skipped": False, **m})
 
         # compute SPD / EOpp for this identity if both groups
         # are present and not skipped
@@ -203,10 +246,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         worst_spd = pi["SPD"].abs().max()
         worst_eopp = pi["EOpp_diff"].abs().max()
         # worst performance across all non-skipped groups
-        if rep.empty or "skipped" not in rep.columns:
-            non_skipped = rep
-        else:
-            non_skipped = rep[~rep["skipped"]]
+        non_skipped = rep if rep.empty or "skipped" not in rep.columns else rep[~rep["skipped"]]
         worst_acc = non_skipped["acc"].min() if "acc" in non_skipped else np.nan
         worst_f1 = non_skipped["f1"].min() if "f1" in non_skipped else np.nan
         summary_rows.append(
@@ -230,9 +270,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
 
     pd.DataFrame(summary_rows).to_csv(rep_out.with_suffix(".summary.csv"), index=False)
     print(f"Wrote per-group metrics -> {rep_out}")
-    print(
-        f"Wrote per-identity disparities -> {rep_out.with_suffix('.per_identity.csv')}"
-    )
+    print(f"Wrote per-identity disparities -> {rep_out.with_suffix('.per_identity.csv')}")
     print(f"Wrote summary -> {rep_out.with_suffix('.summary.csv')}")
 
 

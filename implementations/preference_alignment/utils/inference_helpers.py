@@ -1,20 +1,33 @@
-# inference_helpers.py
+"""Utilities for model inference, checkpointing, and record preparation."""
 
+import glob
+import json
 import os
 import re
-import json
-import glob
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Any
 
-import torch
 import jsonlines
-from datasets import load_from_disk, load_dataset, DatasetDict
-from transformers import AutoTokenizer
+import torch
+from datasets import DatasetDict, load_dataset, load_from_disk
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 
 def clean_json_output(text: str) -> str:
+    """
+    Strip code formatting artifacts to isolate a raw JSON string.
+
+    Parameters
+    ----------
+    text : str
+        The raw output from a model, potentially containing markdown fences.
+
+    Returns
+    -------
+    str
+        The cleaned JSON string.
+    """
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -22,19 +35,32 @@ def clean_json_output(text: str) -> str:
     return text.strip()
 
 
-def _suffix_num(path):
+def _suffix_num(path) -> int:
     try:
         return int(Path(path).stem.split("_")[-1])
     except Exception:
         return -1
 
 
-def save_checkpoint(
-    scenes: List[dict],
-    task_name: str,
-    checkpoint_dir: str,
-    step: int,
-):
+def save_checkpoint(scenes: list[dict], task_name: str, checkpoint_dir: str, step: int) -> None:
+    """
+    Persist the current state of a long-running inference task.
+
+    Parameters
+    ----------
+    scenes : list of dict
+        The current list of generated responses and metadata.
+    task_name : str
+        A unique name for the inference task.
+    checkpoint_dir : str
+        Directory where checkpoint files will be written.
+    step : int
+        The current iteration or record index.
+
+    Returns
+    -------
+    None
+    """
     os.makedirs(checkpoint_dir, exist_ok=True)
     path = os.path.join(checkpoint_dir, f"ckpt_{task_name}_{step}.json")
     with open(path, "w", encoding="utf-8") as f:
@@ -42,7 +68,24 @@ def save_checkpoint(
     print(f"[ckpt] saved → {path}")
 
 
-def load_checkpoint(task_name: str, checkpoint_dir: str):
+def load_checkpoint(task_name: str, checkpoint_dir: str) -> tuple[list[dict], int]:
+    """
+    Recover the most recent state for a specific inference task.
+
+    Parameters
+    ----------
+    task_name : str
+        The name of the task to resume.
+    checkpoint_dir : str
+        The folder to search for checkpoint files.
+
+    Returns
+    -------
+    scenes : list of dict
+        The records updated so far.
+    last_idx : int
+        The index of the last processed record. Returns -1 if no checkpoint exists.
+    """
     pattern = os.path.join(checkpoint_dir, f"ckpt_{task_name}_*.json")
     files = glob.glob(pattern)
     if not files:
@@ -58,11 +101,24 @@ def load_checkpoint(task_name: str, checkpoint_dir: str):
 
 
 def apply_chat_template(prompt: str, tokenizer: AutoTokenizer) -> str:
+    """
+    Convert a raw text prompt into a model-specific conversational format.
+
+    Parameters
+    ----------
+    prompt : str
+        The textual instruction.
+    tokenizer : AutoTokenizer
+        The tokenizer providing the chat template logic.
+
+    Returns
+    -------
+    str
+        The formatted prompt string with 'user' and 'system' tags applied.
+    """
     msgs = [{"role": "user", "content": prompt}]
     try:
-        return tokenizer.apply_chat_template(
-            msgs, add_generation_prompt=True, tokenize=False
-        )
+        return tokenizer.apply_chat_template(msgs, add_generation_prompt=True, tokenize=False)
     except Exception:
         return tokenizer.apply_chat_template(
             [{"role": "user", "content": prompt}],
@@ -71,13 +127,45 @@ def apply_chat_template(prompt: str, tokenizer: AutoTokenizer) -> str:
         )
 
 
-def prepare_record(rec: dict, tokenizer: AutoTokenizer):
+def prepare_record(rec: dict, tokenizer: AutoTokenizer) -> tuple[dict[Any, Any], str]:
+    """
+    Isolate metadata from the prompt and format the prompt for models.
+
+    Parameters
+    ----------
+    rec : dict
+        A raw dataset record.
+    tokenizer : AutoTokenizer
+        The tokenizer for applying templates.
+
+    Returns
+    -------
+    meta : dict
+        The non-prompt fields of the record.
+    prompt : str
+        The template-formatted prompt string.
+    """
     meta = {k: rec[k] for k in rec if k != "prompt"}
     prompt = apply_chat_template(rec["prompt"], tokenizer)
     return meta, prompt
 
 
-def load_disk_records(path: str, limit: int = 200):
+def load_disk_records(path: str, limit: int = 200) -> list[dict[Any, Any]]:
+    """
+    Load a sampling of records from a local Hugging Face dataset.
+
+    Parameters
+    ----------
+    path : str
+        Location of the dataset on disk.
+    limit : int, default 200
+        Maximum number of samples to load.
+
+    Returns
+    -------
+    list of dict
+        The extracted records.
+    """
     ds = load_from_disk(path)
 
     if isinstance(ds, DatasetDict):
@@ -86,7 +174,22 @@ def load_disk_records(path: str, limit: int = 200):
     return [ds[i] for i in range(min(limit, len(ds)))]
 
 
-def load_arrow_records(path: str, limit: int = 200):
+def load_arrow_records(path: str, limit: int = 200) -> list[dict[Any, Any]]:
+    """
+    Load a sampling of records from a raw Arrow file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the .arrow file.
+    limit : int, default 200
+        Maximum number of samples to load.
+
+    Returns
+    -------
+    list of dict
+        The extracted records.
+    """
     ds = load_dataset("arrow", data_files=path, split="train")
     ds = ds.select(range(min(limit, len(ds))))
     return [dict(r) for r in ds]
@@ -99,32 +202,53 @@ QA_PATTERN = re.compile(
 
 
 def build_prompt_records(
-    dataset: List[dict],
-    templates: Dict[str, list],
+    dataset: list[dict],
+    templates: dict[str, list],
     template_key: str,
     reverse: bool = False,
-):
+) -> list[Any]:
+    """
+    Synthesize model-ready prompts from a raw dataset using templates.
+
+    Parameters
+    ----------
+    dataset : list of dict
+        The raw dataset items.
+    templates : dict
+        A library of prompt template fragments.
+    template_key : str
+        The specific template ID to use.
+    reverse : bool, default False
+        If True, the labeling hint in the prompt is flipped.
+
+    Returns
+    -------
+    list of dict
+        Formatted records including the final prompt and metadata.
+    """
     tpl = templates[template_key]
     records = []
 
-    for i, it in enumerate(dataset):
-        it = dict(it)
-        chosen = it.get("chosen_id", it.get("chosen"))
+    for i, raw_item in enumerate(dataset):
+        item = dict(raw_item)
+        chosen = item.get("chosen_id", item.get("chosen"))
 
-        if not all(k in it for k in ("q", "r1", "r2")):
-            m = QA_PATTERN.search(it["prompt"])
-            it["q"], it["r1"], it["r2"] = m.group(1), m.group(2), m.group(3)
+        if not all(k in item for k in ("q", "r1", "r2")):
+            m = QA_PATTERN.search(item["prompt"])
+            item["q"], item["r1"], item["r2"] = m.group(1), m.group(2), m.group(3)
 
-        prompt = tpl[0] + it["q"] + tpl[1] + it["r1"] + tpl[2] + it["r2"]
+        prompt = tpl[0] + item["q"] + tpl[1] + item["r1"] + item["r2"]
         hint = chosen if not reverse else (3 - chosen)
         prompt += tpl[3] + str(hint) + tpl[4]
 
-        records.append({
-            "prompt_idx": i,
-            "prompt": prompt,
-            "chosen": chosen,
-            "meta": it,
-        })
+        records.append(
+            {
+                "prompt_idx": i,
+                "prompt": prompt,
+                "chosen": chosen,
+                "meta": item,
+            }
+        )
 
     return records
 
@@ -140,7 +264,40 @@ def run_best_of_n(
     checkpoint_every=5,
     max_new_tokens=512,
     prompt_max_len=6400,
-):
+) -> None:
+    """
+    Perform Best-of-N generation with sampling and checkpointing.
+
+    Generates multiple candidates for each prompt, allowing for downstream
+    preference selection.
+
+    Parameters
+    ----------
+    records : list
+        The input prompt records.
+    model : object
+        The causal LLM for generation.
+    tokenizer : object
+        The corresponding tokenizer.
+    output_path : str
+        Path to save the final JSONL results.
+    checkpoint_dir : str
+        Folder for intermediate progress saves.
+    task_name : str
+         Label for the checkpointing system.
+    n : int, default 8
+        The number of samples to generate per prompt.
+    checkpoint_every : int, default 5
+        Frequency of checkpointing (in records).
+    max_new_tokens : int, default 512
+        Maximum length of the generated output.
+    prompt_max_len : int, default 6400
+        Hard limit for context truncation.
+
+    Returns
+    -------
+    None
+    """
     scenes, last_idx = load_checkpoint(task_name, checkpoint_dir)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -172,18 +329,17 @@ def run_best_of_n(
 
         in_len = inputs["attention_mask"].sum(dim=1)[0].item()
         gens = [
-            clean_json_output(
-                tokenizer.decode(out[j, in_len:], skip_special_tokens=True)
-            )
-            for j in range(out.size(0))
+            clean_json_output(tokenizer.decode(out[j, in_len:], skip_special_tokens=True)) for j in range(out.size(0))
         ]
 
-        scenes.append({
-            "prompt_idx": i,
-            "prompt": prompt,
-            "outputs": gens,
-            "meta": meta,
-        })
+        scenes.append(
+            {
+                "prompt_idx": i,
+                "prompt": prompt,
+                "outputs": gens,
+                "meta": meta,
+            }
+        )
 
         if len(scenes) % checkpoint_every == 0:
             save_checkpoint(scenes, task_name, checkpoint_dir, len(scenes))
@@ -192,21 +348,39 @@ def run_best_of_n(
         writer.write(s)
     writer.close()
 
+
 def run_batched_inference(
     records,
     model,
     tokenizer,
     batch_size=4,
     max_new_tokens=512,
-):
+) -> list[dict[Any, Any]]:
     """
-    Deterministic batched generation.
-    Returns list of {prompt_idx, prompt, output, meta}
+    Excute deterministic inference using batched inputs for efficiency.
+
+    Parameters
+    ----------
+    records : list of dict
+        The input prompt records.
+    model : object
+        The model to use.
+    tokenizer : object
+        The tokenizer to use.
+    batch_size : int, default 4
+        Number of prompts to process in a single GPU pass.
+    max_new_tokens : int, default 512
+        Length limit for generation.
+
+    Returns
+    -------
+    list of dict
+        A collection of generation results (ID, prompt, output, and meta).
     """
     results = []
 
     for i in range(0, len(records), batch_size):
-        batch = records[i:i + batch_size]
+        batch = records[i : i + batch_size]
         prompts = [r["prompt"] for r in batch]
 
         inputs = tokenizer(
@@ -225,18 +399,19 @@ def run_batched_inference(
             )
 
         gens = tokenizer.batch_decode(
-            outputs[:, inputs["input_ids"].shape[1]:],
+            outputs[:, inputs["input_ids"].shape[1] :],
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         )
 
         for rec, gen in zip(batch, gens):
-            results.append({
-                "prompt_idx": rec["prompt_idx"],
-                "prompt": rec["prompt"],
-                "output": gen,
-                "meta": rec["meta"],
-            })
+            results.append(
+                {
+                    "prompt_idx": rec["prompt_idx"],
+                    "prompt": rec["prompt"],
+                    "output": gen,
+                    "meta": rec["meta"],
+                }
+            )
 
     return results
-

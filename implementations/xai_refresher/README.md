@@ -40,18 +40,14 @@ The following Jupyter notebooks are provided in this folder:
    (SNMF). Covers concept dictionary learning, multimodal grounding (text + image), and
    local interpretations per sample on COCO.
 
-## Package Dependencies
+### Package Dependencies
 
-This implementation includes two local packages under `src/`:
+The Concept Grounding notebook requires Java to be installed. On Linux, you can install it using:
 
-- **`xl-vlms`** (`src/xl-vlms/src/`): A library for analyzing vision-language models through
-  concept-based explainability. Provides modules for feature extraction from VLM hidden states,
-  SNMF-based concept decomposition, multimodal grounding, model steering, and evaluation metrics
-  (CLIPScore, BERTScore, VQA accuracy). Supports LLaVA, IDEFICS2, Qwen-VL, and Molmo.
-
-- **`utils`** (`src/utils/`): XAI utility library with implementations of DSEG-LIME
-  (data-driven segmentation LIME with SAM integration), Generalized LIME (`GLIME/`), SHAP
-  utilities, and evaluation metrics for explanation quality.
+```bash
+sudo apt update
+sudo apt install -y default-jre
+```
 
 ## Resources
 
@@ -71,10 +67,10 @@ For further reading on the methods covered in this module:
 ## Getting Started
 
 1. From the **root of the repository**, create a virtual environment and install the
-   `ref1-refresher-interpretability` dependency group using `uv`:
+   `xai-refresher` dependency group using `uv`:
 
    ```bash
-   uv sync --group ref1-refresher-interpretability
+   uv sync --group xai-refresher
    ```
 
    This creates a `.venv` in the repo root and installs all packages needed for this module

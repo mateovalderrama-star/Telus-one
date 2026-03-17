@@ -27,12 +27,31 @@ PLAN_REQUIRED_KEYS = [
 
 
 def _load_template() -> str:
-    """Load the planner prompt template from a file."""
+    """
+    Read the planning instructions from the project's prompt configuration.
+
+    Returns
+    -------
+    str
+        The content of the planner prompt template.
+    """
     return PLANNER_PROMPT_PATH.read_text()
 
 
 def build_planner_prompt(sample: PerceivedSample) -> str:
-    """Render the planner prompt for a given sample."""
+    """
+    Inject sample details into the specialized planning template.
+
+    Parameters
+    ----------
+    sample : PerceivedSample
+        The data sample containing the question and context.
+
+    Returns
+    -------
+    str
+        The rendered prompt for the planner agent.
+    """
     template = _load_template()
 
     choices_block = ""
@@ -55,9 +74,22 @@ def build_planner_prompt(sample: PerceivedSample) -> str:
 
 
 def _build_llm(backend: str, model: str, api_key: Optional[str]) -> LLM:
-    """Construct the LLM instance based on the specified backend and model.
+    """
+    Configure the model interface for the planner.
 
-    Reads API keys from environment variables if not provided directly.
+    Parameters
+    ----------
+    backend : {'openai', 'gemini'}
+        The language model provider.
+    model : str
+        The specific model name.
+    api_key : str, optional
+        Key for accessing the model.
+
+    Returns
+    -------
+    LLM
+        The initialized model controller.
     """
     if backend == "openai":
         return LLM(
@@ -75,7 +107,12 @@ def _build_llm(backend: str, model: str, api_key: Optional[str]) -> LLM:
 
 
 class PlannerAgent:
-    """Wraps a CrewAI Agent/Crew to generate a strict JSON plan for chart inspection."""
+    """
+    An agent responsible for deriving a logical inspection strategy.
+
+    The `PlannerAgent` processes a chart question without visual input to
+    prescribe a detailed procedure for a subsequent vision-capable agent.
+    """
 
     def __init__(
         self,
@@ -83,24 +120,47 @@ class PlannerAgent:
         model: str = "gemini-2.5-flash-lite",
         api_key: Optional[str] = None,
     ):
-        """Parameters"""
+        """
+        Initialize the planner with the desired backend and model.
+
+        Parameters
+        ----------
+        backend : str, default 'gemini'
+            The provider for the planning model.
+        model : str, default 'gemini-2.5-flash-lite'
+            The model name.
+        api_key : str, optional
+            API key for the provider.
+        """
         self.backend = backend
         self.model = model
         self.api_key = api_key
         self._llm = _build_llm(backend, model, api_key)
 
-    def run(
-        self, sample: PerceivedSample, opik_trace: Any = None
-    ) -> Tuple[str, dict, bool, str]:
+    def run(self, sample: PerceivedSample, opik_trace: Any = None) -> Tuple[str, dict, bool, str]:
         """
-        Run the planner for one sample.
+        Execute the planning phase for a new question.
+
+        Uses CrewAI to orchestrate the generation and parsing of the
+        instructional plan.
+
+        Parameters
+        ----------
+        sample : PerceivedSample
+            The question and context to plan for.
+        opik_trace : Any, optional
+            Observability object for logging.
 
         Returns
         -------
-            prompt       – the rendered prompt string
-            parsed       – parsed plan dict (may be partial on error)
-            parse_error  – True if JSON parsing needed repair or failed
-            raw_text     – raw LLM output
+        prompt : str
+            The task description given to the planner.
+        parsed : dict
+            The extracted plan (steps, question_type, etc.).
+        parse_error : bool
+            True if JSON parsing failed.
+        raw_text : str
+            The raw response from the LLM.
         """
         prompt = build_planner_prompt(sample)
 

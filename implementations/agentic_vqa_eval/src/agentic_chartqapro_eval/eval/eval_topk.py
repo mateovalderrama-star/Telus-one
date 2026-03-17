@@ -5,7 +5,7 @@ answers. Computes hit@1, hit@2, hit@3 without modifying any existing MEPs or
 metrics.
 
 Usage:
-    python -m agentic_chartqapro_eval.eval.eval_topk \
+    uv run --env-file .env -m agentic_chartqapro_eval.eval.eval_topk \
         --mep_dir meps/openai_openai/chartqapro/test \
         --out topk_metrics.jsonl \
         --backend openai \
@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
+from google import genai
+from openai import OpenAI
 
 from ..mep.writer import iter_meps
 from ..utils.json_strict import parse_strict
@@ -70,8 +72,6 @@ def _call_openai_topk(
     model: str,
     api_key: Optional[str],
 ) -> str:
-    from openai import OpenAI
-
     client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY", ""))
     b64, mime = _encode_image(image_path)
     resp = client.chat.completions.create(
@@ -100,18 +100,12 @@ def _call_gemini_topk(
     model: str,
     api_key: Optional[str],
 ) -> str:
-    import google.generativeai as genai
-    from PIL import Image
-
-    genai.configure(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
-    m = genai.GenerativeModel(model)
-    image = Image.open(image_path)
-    resp = m.generate_content(
-        [image, prompt],
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.3,
-            max_output_tokens=256,
-        ),
+    client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
+    data, mime = _encode_image(image_path)
+    resp = client.models.generate_content(
+        model=model,
+        contents=[genai.types.Part.from_bytes(data=base64.b64decode(data), mime_type=f"image/{mime}"), prompt],
+        config=genai.types.GenerateContentConfig(temperature=0.3, max_output_tokens=256),
     )
     return resp.text or ""
 
@@ -133,9 +127,7 @@ def get_topk_candidates(
     plan_steps = plan.get("steps", [])
 
     choices_block = f"Choices: {', '.join(choices)}" if choices else ""
-    steps_text = (
-        "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(plan_steps)) or "  (none)"
-    )
+    steps_text = "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(plan_steps)) or "  (none)"
 
     prompt = _TOPK_PROMPT.format(
         k=k,
@@ -161,9 +153,7 @@ def get_topk_candidates(
         return []
 
 
-def _hit_at_k(
-    expected: str, candidates: List[str], question_type: str, k: int
-) -> float:
+def _hit_at_k(expected: str, candidates: List[str], question_type: str, k: int) -> float:
     """1.0 if expected matches any of the first k candidates."""
     for c in candidates[:k]:
         if score_answer_accuracy(expected, c, question_type) > 0:
@@ -188,9 +178,7 @@ def evaluate_topk(
     # Top-1 answer from the original MEP (already computed, no extra call)
     original_answer = mep.get("vision", {}).get("parsed", {}).get("answer", "")
 
-    candidates = get_topk_candidates(
-        mep, k=k, backend=backend, model=model, api_key=api_key
-    )
+    candidates = get_topk_candidates(mep, k=k, backend=backend, model=model, api_key=api_key)
 
     result: dict = {
         "sample_id": sample.get("sample_id", ""),
@@ -199,9 +187,7 @@ def evaluate_topk(
         "expected": expected,
         "original_answer": original_answer,
         "topk_candidates": candidates,
-        "original_accuracy": score_answer_accuracy(
-            expected, original_answer, question_type
-        ),
+        "original_accuracy": score_answer_accuracy(expected, original_answer, question_type),
     }
 
     for ki in range(1, k + 1):
@@ -221,11 +207,7 @@ def main() -> None:
     parser.add_argument("--n", type=int, default=None, help="Limit to first N MEPs")
     args = parser.parse_args()
 
-    api_key = (
-        os.environ.get("OPENAI_API_KEY", "")
-        if args.backend == "openai"
-        else os.environ.get("GEMINI_API_KEY", "")
-    )
+    api_key = os.environ.get("OPENAI_API_KEY", "") if args.backend == "openai" else os.environ.get("GEMINI_API_KEY", "")
 
     with open(args.out, "w") as f_out:
         count = 0
@@ -246,9 +228,7 @@ def main() -> None:
                 cands = result["topk_candidates"]
                 h1 = result.get("hit_at_1", 0)
                 h3 = result.get(f"hit_at_{args.k}", 0)
-                print(
-                    f"  {sid}  exp={exp!r}  candidates={cands}  hit@1={h1}  hit@{args.k}={h3}"
-                )
+                print(f"  {sid}  exp={exp!r}  candidates={cands}  hit@1={h1}  hit@{args.k}={h3}")
                 count += 1
             except Exception as exc:
                 print(f"  Error: {exc}")

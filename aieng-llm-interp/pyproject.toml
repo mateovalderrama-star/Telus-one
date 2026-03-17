@@ -1,0 +1,31 @@
+[project]
+name = "aieng-llm-interp"
+version = "0.1.0"
+description = "AI Engineering example implementation"
+authors = [{name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
+requires-python = ">=3.11,<4.0"
+readme = "README.md"
+license = "LicenseRef-Vector-Institute-License"
+license-files = ["LICENSE.md"]
+dependencies = [
+    "torch>=2.0,<3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+# Default dependency groups to be installed
+[tool.uv]
+default-groups = ["dev"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = ["aieng/"]
+
+[tool.hatch.build.targets.wheel]
+include = ["aieng/"]

@@ -3,7 +3,7 @@
 This lets you visualise runs that completed before Opik was wired in.
 
 Usage:
-    python -m agentic_chartqapro_eval.opik_integration.ingest \
+    uv run --env-file .env -m agentic_chartqapro_eval.opik_integration.ingest \
         --mep_dir meps/openai_openai/chartqapro/test \
         [--metrics_file metrics.jsonl]
 """
@@ -11,7 +11,7 @@ Usage:
 import argparse
 import contextlib
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -33,7 +33,24 @@ def ingest_mep(
     metrics: Optional[dict] = None,
     project_name: str = "chartqapro-eval",
 ) -> None:
-    """Create an Opik Trace from a single MEP dict (retroactively)."""
+    """
+    Convert a single MEP JSON record into a retroactive Opik trace.
+
+    Parameters
+    ----------
+    mep : dict
+        The raw MEP record.
+    client : object
+        The Opik client.
+    metrics : dict, optional
+        Pre-computed metrics for the sample.
+    project_name : str, default 'chartqapro-eval'
+        Target project.
+
+    Returns
+    -------
+    None
+    """
     sample = mep.get("sample", {})
     plan = mep.get("plan", {})
     vision = mep.get("vision", {})
@@ -73,8 +90,6 @@ def ingest_mep(
         p_start = start_time
         p_end = None
         if start_time and planner_ms:
-            from datetime import timedelta
-
             p_end = start_time + timedelta(milliseconds=planner_ms)
         planner_span = trace.span(
             name="planner",
@@ -140,7 +155,23 @@ def ingest_dir(
     metrics_file: Optional[str] = None,
     project_name: str = "chartqapro-eval",
 ) -> int:
-    """Ingest all MEPs from a directory. Returns the number ingested."""
+    """
+    Bulk ingest all MEP files from a local directory into Opik.
+
+    Parameters
+    ----------
+    mep_dir : str
+        Path to the folder containing JSON results.
+    metrics_file : str, optional
+        Path to a .jsonl file with metrics data.
+    project_name : str, default 'chartqapro-eval'
+        Opik project identifier.
+
+    Returns
+    -------
+    int
+        The total number of successfully ingested records.
+    """
     client = get_client()
     if client is None:
         print("[opik] No client — set OPIK_URL_OVERRIDE or OPIK_API_KEY")
@@ -185,19 +216,21 @@ def ingest_dir(
 
 
 def main() -> None:
-    """Parse CLI arguments and ingest MEP files into Opik."""
+    """
+    Command-line interface for retroactive ingestion into Opik.
+
+    Returns
+    -------
+    None
+    """
     parser = argparse.ArgumentParser(description="Ingest existing MEPs into Opik")
-    parser.add_argument(
-        "--mep_dir", required=True, help="Directory containing MEP JSON files"
-    )
+    parser.add_argument("--mep_dir", required=True, help="Directory containing MEP JSON files")
     parser.add_argument(
         "--metrics_file",
         default=None,
         help="Optional metrics.jsonl for feedback scores",
     )
-    parser.add_argument(
-        "--project", default="chartqapro-eval", help="Opik project name"
-    )
+    parser.add_argument("--project", default="chartqapro-eval", help="Opik project name")
     args = parser.parse_args()
 
     ingest_dir(args.mep_dir, args.metrics_file, project_name=args.project)

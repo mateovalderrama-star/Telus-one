@@ -9,15 +9,24 @@ from src.media_utils import get_duration
 
 def save_segmented_srt(entries, segment_length, video_id, output_dir, total_segments):
     """
-    Save segmented SRT files based on a given segment length.
+    Divide subtitle entries into separate file segments.
 
     Parameters
     ----------
-    - entries (list): List of subtitle entries with 'start', 'end', and 'text'.
-    - segment_length (int): Length of each segment in seconds.
-    - video_id (str): Identifier for the video.
-    - output_dir (str): Directory to save the segmented SRT files.
-    - total_segments (int): Total number of segments to create.
+    entries : list of dict
+        The full list of subtitle entries with timing and text.
+    segment_length : int
+        The fixed duration for each segment in seconds.
+    video_id : str
+        The name of the video these subtitles belong to.
+    output_dir : str
+        The path where the segmented .srt files will be saved.
+    total_segments : int
+        The total number of segments to generate.
+
+    Returns
+    -------
+    None
     """
     os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists.
 
@@ -33,10 +42,6 @@ def save_segmented_srt(entries, segment_length, video_id, output_dir, total_segm
     # Save each segment to a separate SRT file.
     for seg_id in range(total_segments):
         seg_entries = segments[seg_id]
-
-        # if len(seg_entries) == 0:
-        #     # Skip writing empty files.
-        #     continue
 
         out_path = os.path.join(
             output_dir,
@@ -55,7 +60,31 @@ def save_segmented_srt(entries, segment_length, video_id, output_dir, total_segm
 
 
 def split_precisely(input_file, output_dir, prefix, ext, segment_length, min_last=5):
-    """Split a media file into precise fixed-length segments using ffmpeg."""
+    """
+    Split a video or audio file into accurate sections.
+
+    Calculates the exact start times and durations, ensuring that short
+    trail-end segments are merged with the previous one to avoid tiny files.
+
+    Parameters
+    ----------
+    input_file : str
+        The path to the source media file.
+    output_dir : str
+        Target directory for segments.
+    prefix : str
+        Naming prefix for the resulting segments.
+    ext : str
+        The file extension (e.g., 'mp4', 'wav').
+    segment_length : int
+        Target duration for each section in seconds.
+    min_last : int, default 5
+        Minimum duration for the final segment before it is merged.
+
+    Returns
+    -------
+    None
+    """
     total_duration = get_duration(input_file)
 
     full_segments = int(total_duration // segment_length)
@@ -115,14 +144,24 @@ def split_precisely(input_file, output_dir, prefix, ext, segment_length, min_las
 
 
 def split_video(video_dir, segment_dir, segment_length, max_files: int = None):
-    """Split video files in a directory into segments.
-
-    Args:
-        video_dir (str)
-        segment_length (int)
-        max_files (int, optional): number of videos to process
     """
+    Automate the segmentation of multiple video files in a directory.
 
+    Parameters
+    ----------
+    video_dir : str
+        The folder containing the full-length video files.
+    segment_dir : str
+        The output folder for the resulting video segments.
+    segment_length : int
+        The duration for each segment in seconds.
+    max_files : int, optional
+        Limit the number of videos processed (useful for testing).
+
+    Returns
+    -------
+    None
+    """
     output_dir = segment_dir
     os.makedirs(output_dir, exist_ok=True)
 
@@ -145,20 +184,30 @@ def split_video(video_dir, segment_dir, segment_length, max_files: int = None):
 
 
 def split_audio(audio_dir, segment_dir, segment_length, max_files: int = None):
-    """Split audio files in a directory.
+    """
+    Automate the segmentation of multiple audio files in a directory.
 
-    Args:
-        audio_dir (str)
-        segment_length (int)
-        max_files (int, optional): number of audio files to process
+    Parameters
+    ----------
+    audio_dir : str
+        The folder containing the full-length audio files.
+    segment_dir : str
+        The output folder for the resulting WAV audio segments.
+    segment_length : int
+        The duration for each segment in seconds.
+    max_files : int, optional
+        Limit the number of audio files processed.
+
+    Returns
+    -------
+    None
     """
     os.makedirs(segment_dir, exist_ok=True)
 
     files = [
         f
         for f in sorted(os.listdir(audio_dir))
-        if f.lower().endswith((".m4a", ".wav"))
-        and os.path.isfile(os.path.join(audio_dir, f))
+        if f.lower().endswith((".m4a", ".wav")) and os.path.isfile(os.path.join(audio_dir, f))
     ]
 
     if max_files is not None:

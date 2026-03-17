@@ -1,30 +1,58 @@
-# dpo_helpers.py
-import os
+"""Utilities for DPO output parsing, grouping, and pairing."""
+
 import json
 import random
 import re
+from typing import Any
+
 import numpy as np
-from datasets import Dataset
+
 
 random.seed(2021)
 
-def safe_json_loads(s):
+
+def safe_json_loads(s) -> Any | None:
+    """
+    Parse a JSON string with an error-resistant return value.
+
+    Parameters
+    ----------
+    s : str
+        The string content to load.
+
+    Returns
+    -------
+    Any or None
+        The parsed object if successful, otherwise None.
+    """
     try:
         return json.loads(s)
     except Exception:
         return None
 
 
-def evaluate(output_str):
+def evaluate(output_str) -> Any | int | None:
     """
-    Parse model outputs to extract better_answer = 1 or 2.
-    Robust to malformed JSON.
+    Extract the 'better_answer' integer from a model's response string.
+
+    Tries multiple strategies including strict JSON, regex for quoted pairs,
+    and fallback for embedded blocks.
+
+    Parameters
+    ----------
+    output_str : str
+        The raw response text from the judge model.
+
+    Returns
+    -------
+    int or None
+        The selected answer index (1 or 2) if identified.
     """
-    output_str = output_str.strip().replace('”,', '",').replace('”', '"')
+    output_str = output_str.strip().replace("”,", '",').replace("”", '"')
 
     # Case 1: fenced JSON
     if "```json" in output_str:
-        match = re.search(r'```json(.*?)```', output_str, re.DOTALL)
+        match = re.search(r"```json(.*?)```", output_str, re.DOTALL)
         if match:
             data = safe_json_loads(match.group(1))
             if data:
@@ -38,7 +66,7 @@ def evaluate(output_str):
 
     # Case 3: embedded JSON
     if "{" in output_str and "}" in output_str:
-        match = re.search(r'{(.*?)}', output_str, re.DOTALL)
+        match = re.search(r"{(.*?)}", output_str, re.DOTALL)
         if match:
             data = safe_json_loads("{" + match.group(1) + "}")
             if data:
@@ -51,12 +79,42 @@ def evaluate(output_str):
 
     return None
 
-def load_jsonl(path):
+
+def load_jsonl(path) -> list[Any]:
+    """
+    Read a JSON Lines file into memory.
+
+    Parameters
+    ----------
+    path : str
+        The location of the .jsonl file.
+
+    Returns
+    -------
+    list of dict
+        A list of individual records.
+    """
     with open(path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 
 
-def split_positive_negative(dataset):
+def split_positive_negative(dataset) -> dict[Any, Any]:
+    """
+    Categorize model generations by their correctness relative to a label.
+
+    Samples are grouped into 'positive' (correct), 'negative' (incorrect),
+    or 'unknown' (failed to parse) categories.
+
+    Parameters
+    ----------
+    dataset : list of dict
+        The items from an inference result file.
+
+    Returns
+    -------
+    dict
+        A mapping of test IDs to their categorized samples.
+    """
     grouped = {}
     none_rate = []
 
@@ -92,7 +150,28 @@ def split_positive_negative(dataset):
     print(f"Unknown rate: {np.mean(none_rate) if none_rate else 0:.3f}")
     return grouped
 
-def construct_dpo_pairs(guide_split, guide_rev_split, output_split):
+
+def construct_dpo_pairs(guide_split, guide_rev_split, output_split) -> dict[str, list[Any]]:
+    """
+    Generate DPO-ready (chosen, rejected) preference pairs.
+
+    Utilizes multiple strategies including matching correct vs incorrect
+    Best-of-N responses and cross-referencing reversed prompt results.
+
+    Parameters
+    ----------
+    guide_split : dict
+        Categorized results from a guided forward prompt.
+    guide_rev_split : dict
+        Categorized results from a guided reverse prompt.
+    output_split : dict
+        Categorized results for the core data.
+
+    Returns
+    -------
+    dict
+        A dictionary of lists structured for DPO training datasets.
+    """
     pairs = {
         "conversations": [],
         "chosen": [],
@@ -173,13 +252,28 @@ def construct_dpo_pairs(guide_split, guide_rev_split, output_split):
     return pairs
 
 
-def domain_split(dataset, tag_field="tag"):
+def domain_split(dataset, tag_field="tag") -> dict[Any, Any]:
+    """
+    Perform a domain-aware train/test split.
+
+    Parameters
+    ----------
+    dataset : Dataset
+        The preference dataset to split.
+    tag_field : str, default 'tag'
+        The field indicating the domain of each sample.
+
+    Returns
+    -------
+    dict
+        A dictionary of DatasetDict objects for each identified domain.
+    """
     domains = set(dataset[tag_field])
     splits = {}
     print(f"\nDomains detected: {domains}")
 
     for tag in domains:
-        sub = dataset.filter(lambda x: x[tag_field] == tag)
+        sub = dataset.filter(lambda x, tag=tag: x[tag_field] == tag)
         splits[tag] = sub.train_test_split(test_size=0.1, seed=42)
 
     return splits

@@ -46,19 +46,18 @@ recent research, with fully reproducible notebooks and evaluation pipelines.
    in the root `pyproject.toml` — install only the group(s) you need:
 
    | Topic | Group name | Install command |
-   |-------|-----------|-----------------|
-   | XAI Refresher | `ref1-refresher-interpretability` | `uv sync --group ref1-refresher-interpretability` |
-   | Bias & Fairness Analysis | `ref2-transparency-xai-toxicity` | `uv sync --group ref2-transparency-xai-toxicity` |
-   | Preference Alignment (DPO) | `ref4-llm-alignment-ethics` | `uv sync --group ref4-llm-alignment-ethics` |
-   | Multimedia RAG (retrieval) | `ref5-multimedia-rag-vlm` | `uv sync --group ref5-multimedia-rag-vlm` |
-   | Multimedia RAG (QA/VLM) | `ref5-multimedia-rag-vlm-qa` | `uv sync --group ref5-multimedia-rag-vlm-qa` |
-   | Agentic ChartQA Eval | `ref6-agentic-xai-eval` | `uv sync --group ref6-agentic-xai-eval` |
+   | ------- | ----------- | ----------------- |
+   | XAI Refresher | `xai-refresher` | `uv sync --group xai-refresher` |
+   | Bias & Fairness Analysis | None | `uv sync` |
+   | Preference Alignment (DPO) | `preference-alignment` | `uv sync --group preference-alignment` |
+   | Multimedia RAG | `multimedia-rag` | `uv sync --group multimedia-rag` |
+   | Agentic ChartQA Eval | `agentic-xai-eval` | `uv sync --group agentic-xai-eval` |
 
    > **CUDA note (ref4 — Preference Alignment):** The group uses `torch==2.6.0` from PyPI
    > (which includes CUDA support on Linux). If you specifically need the CUDA 12.4 build, run:
 
    > ```bash
-   > uv sync --group ref4-llm-alignment-ethics \
+   > uv sync --group preference-alignment \
    >   --index-url https://download.pytorch.org/whl/cu124
    > ```
 

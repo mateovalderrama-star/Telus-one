@@ -16,10 +16,10 @@ The goal is to **analyze and interpret model bias patterns**, not to evaluate a 
 
 ## Environment Setup
 
-From the **root of the repository**, install the `ref2-transparency-xai-toxicity` dependency group using `uv`:
+From the **root of the repository**, install the dependencies using `uv`:
 
 ```bash
-uv sync --group ref2-transparency-xai-toxicity
+uv sync
 source .venv/bin/activate
 ```
 
@@ -51,7 +51,7 @@ Datasets are **not included in this repository**. They are downloaded or prepare
 
 ### 2. Jigsaw (Unintended Bias Dataset)
 
-* Must be downloaded manually from Kaggle (https://www.kaggle.com/competitions/jigsaw-unintended-bias-in-toxicity-classification/data?select=train.csv)
+* Must be downloaded manually from Kaggle (<https://www.kaggle.com/competitions/jigsaw-unintended-bias-in-toxicity-classification/data?select=train.csv>)
 
 * After downloading, place:
 
@@ -101,8 +101,8 @@ STREAM = True
 TAKE = 50000
 SAMPLE = None
 
-DATA_DIR = f"./data/{DATASET}/"
-OUT_PATH = f"./data/{DATASET}/{DATASET}.parquet"
+DATA_DIR = f"data/{DATASET}/"
+OUT_PATH = f"data/{DATASET}/{DATASET}.parquet"
 ```
 
 The notebook will:

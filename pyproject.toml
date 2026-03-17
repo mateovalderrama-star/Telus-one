@@ -1,456 +1,102 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-where = ["implementations/agentic_vqa_eval/src"]
-
 [project]
 name = "interpretability-llms-agents"
 version = "0.1.0"
-description = ""
-authors = [ {name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"}]
+description = "Vector Institute Bootcamp on Interpretability for LLMs and Agents"
+authors = [ {name = "Vector AI Engineering", email = "ai_engineering@vectorinstitute.ai"} ]
+urls = {Repository = "https://github.com/VectorInstitute/interpretability-llms-agents"}
 readme = "README.md"
+license = "LicenseRef-Vector-Institute-License"
+license-files = ["LICENSE.md"]
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    "aieng-topic-impl",
-    "gdown>=5.2.1",
+    "aieng-llm-interp",
+    "datasets>=4.0.0",
+    "ipykernel>=6.29.5",
+    "ipython>=9.4.0",
+    "ipywidgets>=8.1.7",
+    "jupyter>=1.1.1",
     "jupyterlab>=4.4.8",
+    "matplotlib>=3.10.5",
+    "numpy>=1.26,<2.0",
     "openai>=2.8.0",
-    "prettytable>=3.17.0",
-    "wget>=3.2",
-    "ipywidgets",
+    "pandas>=2.3.2",
+    "python-dotenv>=1.2.2",
+    "scikit-learn>=1.5.2",
+    "transformers>=4.47.0",
 ]
-
-[project.urls]
-Repository = "https://github.com/VectorInstitute/interpretability-llms-agents"
 
 [dependency-groups]
+agentic-xai-eval = [
+    "crewai>=1.6.1",
+    "google-genai>=1.67.0",
+    "opik>=1.10.40",
+    "streamlit>=1.55.0",
+]
 dev = [
     "codecov>=2.1.13",
-    "mypy>=1.14.1",
     "nbqa>=1.9.1",
-    "pip-audit>=2.7.3",
-    "pre-commit>=4.1.0",
-    "pytest>=8.3.4",
-    "pytest-asyncio>=0.25.2",
-    "pytest-cov>=6.0.0",
-    "pytest-mock>=3.14.0",
-    "ruff>=0.9.2",
+    "pip-audit>=2.10.0",
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.15.6",
 ]
-
-# Placeholder groups for future reference implementations (fill as needed)
-ref1-refresher-interpretability = [
-    "datasets",
-    "torch<=2.8.0",
-    "torchvision==0.19.1",
-    "tensorflow==2.17.0",
-    "keras==3.9.1",
-    "joblib==1.2.0",
-    "imblearn",
-    "deap",
-    "bitarray",
-    "sphinx~=5.0",
-    "furo",
-    "sphinx_rtd_theme~=1.2.0",
-    "sphinx_material",
-    "category_encoders",
-    "scikit-multilearn~=0.2.0",
-    "arff~=0.9",
-    "ucimlrepo",
-    "gower==0.1.2",
-    "matplotlib==3.10.5",
-    "numpy>=1.26,<2.0",
-    "pandas==2.3.2",
-    "plotly==6.3.0",
-    "scikit_learn==1.7.1",
-    "scipy>=1.9,<1.12",
-    "seaborn==0.13.2",
-    "ts3l==0.70",
-    "efficientnet==1.1.1",
-    "lime==0.2.0.1",
-    "networkx==3.3",
-    "opencv_python==4.10.0.84",
-    "Pillow==11.1.0",
-    "segment_anything==1.0",
-    "scikit-image",
-    "tqdm==4.66.5",
-    "cython>=3.2.4",
-    "kagglehub[pandas-datasets]>=0.4.1",
-    "shap>=0.49.1",
-    "ttach>=0.0.3",
-    "ultralytics>=8.4.9",
-    "nnsight>=0.5.15",
-    "openai-clip>=1.0.1",
-    "einops>=0.8.2",
-    "baukit",
-    "lore-sa",
-    "xlrd>=2.0.2",
-    "grad-cam>=1.5.5",
-    "language-evaluation",
-    "captum>=0.8.0",
-    "huggingface-hub>=1.3.4",
-    "bertviz>=1.4.1",
+multimedia-rag = [
+    "accelerate>=0.29.3",
+    "decord>=0.6.0; sys_platform != 'darwin'",
+    "imagebind",
+    "qwen-omni-utils>=0.0.9",
+    "torchaudio>=2.0.0",
+    "torchcodec>=0.10.0",
 ]
-
-ref2-transparency-xai-toxicity = [
-    # From implementations/bias_fairness_analysis/pyproject.toml
-    # Note: requires python >=3.10,<3.11
-    "accelerate==1.12.0",
-    "datasets==4.0.0",
-    "ipywidgets==8.1.8",
-    "ipykernel",
-    "jupyterlab",
-    "numpy==1.26.4",
-    "pandas==2.3.3",
-    "pyarrow==15.0.2",
-    "scikit-learn==1.7.2",
-    "scipy==1.15.3",
-    "torch==2.2.2",
-    "transformers==4.38.2",
-    "tqdm==4.67.3",
-    "matplotlib>=3.10.8",
-    "rich>=14.3.3",
-    "kaggle>=1.7.4.5",
-]
-
-ref3-mechanistic-interpretability = [
-    # "pkg-three>=0.1.0",
-]
-
-ref4-llm-alignment-ethics = [
-    # From implementations/preference_alignment/dpo_req.txt
-    # Note: PyPI torch==2.6.0 on Linux includes CUDA support; use --index-url https://download.pytorch.org/whl/cu124 if you need the exact CUDA 12.4 build
-    "numpy>=1.26.0",
-    "ipykernel>=6.29.0",
-    "jupyterlab>=4.2.0",
-    "packaging>=24.0",
-    "python-dotenv==1.1",
-    "setuptools>=80.9.0",
-    "wheel>=0.45.1",
-    "build>=1.3.0",
-    "cmake==4.1.0",
-    "ninja>=1.13.0",
-    "torch==2.6.0",
-    "torchvision==0.21.0",
-    "torchaudio==2.6.0",
-    "transformers>=4.43.0,<5.0.0",
-    "trl==0.22.2",
-    "peft>=0.17.1",
-    "accelerate==1.10.1",
-    "bitsandbytes==0.48.1",
-    "einops>=0.8.1",
-    "pyarrow==15.0.2",
-    "sentence-transformers>=5.1.2",
+preference-alignment = [
     "jsonlines>=4.0.0",
-    "aiofiles>=25.1.0",
+    "trl>=0.22.2",
+    "unsloth>=2026.3.4",
+    "unsloth-zoo>=2026.3.2",
+]
+xai-refresher = [
+    "deap>=1.4.3",
+    "efficientnet>=1.1.1",
+    "grad-cam>=1.5.5",
+    "httpimport>=1.4.1",
+    "language-evaluation",
+    "lore-sa",
+    "opencv-python>=4.10.0",
     "seaborn>=0.13.2",
-    "openai>=2.6.1",
-    "pydantic-settings>=2.11.0",
-    "tiktoken==0.7.0",
-    "unsloth",
-    "unsloth-zoo",
-]
-# flash-attn==2.7.3 requires CUDA headers and setuptools at build time;
-# install manually after activating the venv:
-#   pip install flash-attn==2.7.3 --no-build-isolation
-
-ref5-multimedia-rag-vlm = [
-    # From implementations/multimedia_rag/pyproject.toml
-    # Note: requires python >=3.10,<3.11
-    "annotated-doc==0.0.4",
-    "antlr4-python3-runtime==4.9.3",
-    "anyio==4.12.1",
-    "asttokens==3.0.1",
-    "av==14.2.0",
-    "certifi==2026.1.4",
-    "cffi==2.0.0",
-    "click==8.3.1",
-    "comm==0.2.3",
-    "debugpy==1.8.20",
-    "decord==0.6.0",
-    "decorator==5.2.1",
-    "einops==0.8.2",
-    "exceptiongroup==1.3.1",
-    "executing==2.2.1",
-    "filelock==3.24.3",
-    "fsspec==2026.2.0",
-    "ftfy==6.3.1",
-    "fvcore==0.1.5.post20221221",
-    "h11==0.16.0",
-    "hf-xet==1.2.0",
-    "httpcore==1.0.9",
-    "httpx==0.28.1",
-    "huggingface_hub==1.4.1",
-    "idna==3.11",
-    "imagebind",
-    "iopath==0.1.10",
-    "ipykernel==7.2.0",
-    "ipython==8.38.0",
-    "jedi==0.19.2",
-    "Jinja2==3.1.6",
-    "jupyter_client==8.8.0",
-    "jupyter_core==5.9.1",
-    "markdown-it-py==4.0.0",
-    "MarkupSafe==3.0.3",
-    "matplotlib",
-    "matplotlib-inline==0.2.1",
-    "mdurl==0.1.2",
-    "mpmath==1.3.0",
-    "nest-asyncio==1.6.0",
-    "networkx==3.4.2",
-    "numpy==2.2.6",
-    "nvidia-cublas-cu12==12.4.5.8",
-    "nvidia-cuda-cupti-cu12==12.4.127",
-    "nvidia-cuda-nvrtc-cu12==12.4.127",
-    "nvidia-cuda-runtime-cu12==12.4.127",
-    "nvidia-cudnn-cu12==9.1.0.70",
-    "nvidia-cufft-cu12==11.2.1.3",
-    "nvidia-curand-cu12==10.3.5.147",
-    "nvidia-cusolver-cu12==11.6.1.9",
-    "nvidia-cusparse-cu12==12.3.1.170",
-    "nvidia-cusparselt-cu12==0.6.2",
-    "nvidia-nccl-cu12==2.21.5",
-    "nvidia-nvjitlink-cu12==12.4.127",
-    "nvidia-nvtx-cu12==12.4.127",
-    "omegaconf==2.3.0",
-    "packaging==26.0",
-    "pandas==2.3.3",
-    "parameterized==0.9.0",
-    "parso==0.8.6",
-    "pexpect==4.9.0",
-    "pillow==12.1.1",
-    "platformdirs==4.9.2",
-    "portalocker==3.2.0",
-    "prompt_toolkit==3.0.52",
-    "psutil==7.2.2",
-    "ptyprocess==0.7.0",
-    "pure_eval==0.2.3",
-    "pycparser==3.0",
-    "Pygments==2.19.2",
-    "python-dateutil==2.9.0.post0",
-    "pytorchvideo",
-    "pytz==2025.2",
-    "PyYAML==6.0.3",
-    "pyzmq==27.1.0",
-    "regex==2026.2.19",
-    "rich==14.3.3",
-    "safetensors==0.7.0",
-    "setuptools<81",
-    "shellingham==1.5.4",
-    "six==1.17.0",
-    "soundfile==0.13.1",
-    "stack-data==0.6.3",
-    "sympy==1.13.1",
-    "tabulate==0.9.0",
-    "termcolor==3.3.0",
-    "timm==1.0.24",
-    "torch==2.6.0",
-    "torchaudio==2.6.0",
-    "torchvision==0.21.0",
-    "tornado==6.5.4",
-    "tqdm==4.67.3",
-    "traitlets==5.14.3",
-    "triton==3.2.0",
-    "typer==0.24.1",
-    "typer-slim==0.24.0",
-    "types-regex==2026.2.19.20260221",
-    "typing_extensions==4.15.0",
-    "tzdata==2025.3",
-    "wcwidth==0.6.0",
-    "yacs==0.1.8",
-]
-
-ref5-multimedia-rag-vlm-qa = [
-    # From implementations/multimedia_rag/pyproject.toml (QA sub-group)
-    # Note: requires python >=3.10,<3.11
-    "setuptools<81",
-    "accelerate==1.12.0",
-    "annotated-doc==0.0.4",
-    "anyio==4.12.1",
-    "asttokens==3.0.1",
-    "audioread==3.1.0",
-    "av==14.2.0",
-    "certifi==2026.1.4",
-    "cffi==2.0.0",
-    "charset-normalizer==3.4.4",
-    "click==8.3.1",
-    "comm==0.2.3",
-    "debugpy==1.8.20",
-    "decord",
-    "decorator==5.2.1",
-    "einops==0.8.2",
-    "exceptiongroup==1.3.1",
-    "executing==2.2.1",
-    "filelock==3.24.3",
-    "fsspec==2026.2.0",
-    "h11==0.16.0",
-    "hf-xet==1.2.0",
-    "httpcore==1.0.9",
-    "httpx==0.28.1",
-    "huggingface_hub==1.4.1",
-    "idna==3.11",
-    "imagebind",
-    "ipykernel==7.2.0",
-    "ipython==8.38.0",
-    "jedi==0.19.2",
-    "Jinja2==3.1.6",
-    "joblib==1.5.3",
-    "jupyter_client==8.8.0",
-    "jupyter_core==5.9.1",
-    "lazy_loader==0.4",
-    "librosa==0.11.0",
-    "llvmlite==0.46.0",
-    "markdown-it-py==4.0.0",
-    "MarkupSafe==3.0.3",
-    "matplotlib",
-    "matplotlib-inline==0.2.1",
-    "mdurl==0.1.2",
-    "mpmath==1.3.0",
-    "msgpack==1.1.2",
-    "nest-asyncio==1.6.0",
-    "networkx==3.4.2",
-    "numba==0.64.0",
-    "numpy==2.2.6",
-    "nvidia-cublas-cu12==12.4.5.8",
-    "nvidia-cuda-cupti-cu12==12.4.127",
-    "nvidia-cuda-nvrtc-cu12==12.4.127",
-    "nvidia-cuda-runtime-cu12==12.4.127",
-    "nvidia-cudnn-cu12==9.1.0.70",
-    "nvidia-cufft-cu12==11.2.1.3",
-    "nvidia-curand-cu12==10.3.5.147",
-    "nvidia-cusolver-cu12==11.6.1.9",
-    "nvidia-cusparse-cu12==12.3.1.170",
-    "nvidia-cusparselt-cu12==0.6.2",
-    "nvidia-nccl-cu12==2.21.5",
-    "nvidia-nvjitlink-cu12==12.4.127",
-    "nvidia-nvtx-cu12==12.4.127",
-    "packaging==26.0",
-    "parso==0.8.6",
-    "pexpect==4.9.0",
-    "pillow==12.1.1",
-    "platformdirs==4.9.2",
-    "pooch==1.9.0",
-    "prompt_toolkit==3.0.52",
-    "psutil==7.2.2",
-    "ptyprocess==0.7.0",
-    "pure_eval==0.2.3",
-    "pycparser==3.0",
-    "Pygments==2.19.2",
-    "python-dateutil==2.9.0.post0",
-    "PyYAML==6.0.3",
-    "pyzmq==27.1.0",
-    "qwen-omni-utils==0.0.9",
-    "regex==2026.2.19",
-    "requests==2.32.5",
-    "rich==14.3.3",
-    "safetensors==0.7.0",
-    "scikit-learn==1.7.2",
-    "scipy==1.15.3",
-    "sentencepiece==0.2.1",
-    "shellingham==1.5.4",
-    "six==1.17.0",
-    "soundfile==0.13.1",
-    "soxr==1.0.0",
-    "stack-data==0.6.3",
-    "sympy==1.13.1",
-    "threadpoolctl==3.6.0",
-    "timm==1.0.24",
-    "tokenizers==0.22.2",
-    "torch==2.6.0",
-    "torchaudio==2.6.0",
-    "torchvision==0.21.0",
-    "tornado==6.5.4",
-    "tqdm==4.67.3",
-    "traitlets==5.14.3",
-    "transformers==5.2.0",
-    "triton==3.2.0",
-    "typer==0.24.1",
-    "typer-slim==0.24.0",
-    "typing_extensions==4.15.0",
-    "urllib3==2.6.3",
-    "wcwidth==0.6.0",
-]
-
-ref6-agentic-xai-eval = [
-    # From implementations/agentic_vqa_eval/pyproject.toml
-    "crewai>=1.0",
-    "openai>=1.0",
-    "google-generativeai",
-    "datasets",
-    "pillow",
-    "pydantic>=2.0",
-    "python-dotenv",
-    "json-repair",
-    "opik",
-    "pandas",
-    "matplotlib>=3.7",
-    "streamlit>=1.32",
-    "jupyter",
-    "ipykernel",
-    "google-genai>=1.66.0",
-    "pyarrow>=15.0.2,<20",
+    "segment-anything>=1.0",
+    "setuptools<70.0.0",
+    "shap>=0.49.1",
+    "tensorflow>=2.21.0",
+    "xl-vlm",
+    "xlrd>=2.0.2",
 ]
 
 [tool.uv.workspace]
 members = [
-  "aieng-topic-impl",
+  "aieng-llm-interp",
 ]
 
 [tool.uv]
-environments = [
-  "sys_platform == 'linux' and platform_machine == 'x86_64'",
-]
-required-environments = [
-  "sys_platform == 'linux' and platform_machine == 'x86_64'",
-]
+default-groups = ["dev"]
 conflicts = [
   [
-    {group = "ref1-refresher-interpretability"},
-    {group = "ref2-transparency-xai-toxicity"},
-    {group = "ref3-mechanistic-interpretability"},
-    {group = "ref4-llm-alignment-ethics"},
-    {group = "ref5-multimedia-rag-vlm"},
-    {group = "ref5-multimedia-rag-vlm-qa"},
-    {group = "ref6-agentic-xai-eval"},
+    {group = "xai-refresher"},
+    {group = "preference-alignment"},
   ],
 ]
 
 [tool.uv.sources]
-aieng-topic-impl = { workspace = true }
-baukit = { git = "https://github.com/davidbau/baukit", rev = "9d51abd51ebf29769aecc38c4cbef459b731a36e" }
+aieng-llm-interp = { workspace = true }
 lore-sa = { git = "https://github.com/kdd-lab/LORE_sa.git", rev = "abaa480451cd520d659f385d98ecd692d52c66e4" }
+xl-vlm = { git = "https://github.com/mshukor/xl-vlms.git", rev = "3bd525b070066a52ad974b1ba1c5c206342cb708" }
 language-evaluation = { git = "https://github.com/bckim92/language-evaluation.git" }
 imagebind = { git = "https://github.com/facebookresearch/ImageBind.git", rev = "53680b02d7e37b19b124fa37bae4b6c98c38f5be" }
-pytorchvideo = { git = "https://github.com/facebookresearch/pytorchvideo.git", rev = "6cdc929315aab1b5674b6dcf73b16ec99147735f" }
-unsloth = { git = "https://github.com/unslothai/unsloth.git" }
-unsloth-zoo = { git = "https://github.com/unslothai/unsloth-zoo.git" }
-
-[tool.mypy]
-ignore_missing_imports = true
-install_types = true
-pretty = true
-namespace_packages = true
-explicit_package_bases = true
-non_interactive = true
-warn_unused_configs = true
-allow_any_generics = false
-allow_subclassing_any = false
-allow_untyped_calls = false
-allow_untyped_defs = false
-allow_incomplete_defs = false
-check_untyped_defs = true
-allow_untyped_decorators = false
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_return_any = true
-implicit_reexport = false
-strict_equality = true
-extra_checks = true
 
 [tool.ruff]
 include = ["*.py", "pyproject.toml", "*.ipynb"]
-line-length = 88
+line-length = 120
 
 [tool.ruff.format]
 quote-style = "double"
@@ -505,7 +151,20 @@ convention = "numpy"
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 88
 
+[tool.mypy]
+mypy_path = "aieng-llm-interp"
+namespace_packages = true
+explicit_package_bases = true
+exclude = ["tests/"]
+
 [tool.pytest.ini_options]
 markers = [
     "integration_test: marks tests as integration tests",
 ]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["implementations/agentic_vqa_eval/src"]

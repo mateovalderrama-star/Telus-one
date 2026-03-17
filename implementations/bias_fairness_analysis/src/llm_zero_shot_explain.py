@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """LLM zero-shot scoring with Integrated Gradients explanations.
 
 Performs zero-shot scoring on social-problem data using LLMs and computes
@@ -36,6 +34,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import torch
+from aieng.llm_interp.utils import get_device
 from rich.progress import track
 from torch.nn import functional
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -49,31 +48,36 @@ LABELS = {
 }
 
 
-def get_device() -> torch.device:
-    """Get the best available device (CUDA, MPS, or CPU)."""
-    # Prefer CUDA, then Apple MPS, else CPU
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+def load_llm(model_name: str, device: torch.device, force_float32: bool = False) -> tuple[Any, Any]:
+    """
+    Load a pre-trained LLM model and its corresponding tokenizer.
 
+    Configures the model for evaluation, moves it to the specified device,
+    and sets the appropriate data type. It also ensures a padding token is
+    assigned if missing.
 
-def load_llm(
-    model_name: str, device: torch.device, force_float32: bool = False
-) -> tuple[Any, Any]:
-    """Load LLM tokenizer and model with appropriate dtype."""
+    Parameters
+    ----------
+    model_name : str
+        The Hugging Face model identifier to load.
+    device : torch.device
+        The device (CPU or CUDA) to load the model onto.
+    force_float32 : bool, default False
+        If True, forces the model into float32 precision regardless of device.
+
+    Returns
+    -------
+    tuple[Any, Any]
+        A pair containing (model, tokenizer).
+    """
     # Load tokenizer + model; float32 optional for stable grads (LayerNorm FP16 issues)
     tok = AutoTokenizer.from_pretrained(model_name, use_fast=True)
     if tok.pad_token_id is None:
         tok.pad_token = tok.eos_token  # Ensure padding token exists
-    load_dtype = (
-        torch.float32 if (force_float32 or device.type != "cuda") else torch.float16
-    )
+    load_dtype = torch.float32 if (force_float32 or device.type != "cuda") else torch.float16
     model = (
         AutoModelForCausalLM.from_pretrained(
             model_name,
-            # dtype=load_dtype,  # <- use dtype (not deprecated torch_dtype)
             torch_dtype=load_dtype,
             low_cpu_mem_usage=True,
         )
@@ -87,7 +91,21 @@ def load_llm(
 
 
 def format_prompt(text: str, task: str) -> str:
-    """Format prompt for zero-shot classification task."""
+    """
+    Wrap the input text in a task-specific instruction prompt.
+
+    Parameters
+    ----------
+    text : str
+        The user-provided content to classify.
+    task : str
+        The classification task identifier (e.g., 'toxicity', 'hate', 'offense').
+
+    Returns
+    -------
+    str
+        The formatted prompt string ending with a 'Label:' indicator.
+    """
     # Simple instruction + user text -> ensures final token is "Label:" to predict after
     instruction = {
         "toxicity": "Decide if the following text is toxic or non-toxic. Answer with a single word.\nText: ",
@@ -96,17 +114,30 @@ def format_prompt(text: str, task: str) -> str:
     }[task]
     return f"{instruction}{text}\nLabel:"
 
-@torch.no_grad()  # type: ignore[misc]
-def label_logprob(
-    model: Any,
-    tok: Any,
-    prompt_ids: torch.Tensor,
-    label_str: str,
-) -> float:
-    """Compute log probability of a full label given the prompt.
 
-    Computes log p(label | prompt) via teacher forcing over
-    all label tokens (no truncation).
+@torch.no_grad()  # type: ignore[misc]
+def label_logprob(model: Any, tok: Any, prompt_ids: torch.Tensor, label_str: str) -> float:
+    """
+    Compute the total log probability of a target label string given a prompt.
+
+    Uses teacher forcing to calculate the combined log probability across all
+    tokens that make up the target label.
+
+    Parameters
+    ----------
+    model : Any
+        The loaded LLM.
+    tok : Any
+        The tokenizer corresponding to the model.
+    prompt_ids : torch.Tensor
+        Tokenized prompt sequence.
+    label_str : str
+        The string label whose probability is to be calculated.
+
+    Returns
+    -------
+    float
+        The total log probability of the label.
     """
     label_ids = tok.encode(label_str, add_special_tokens=False)
 
@@ -126,9 +157,30 @@ def label_logprob(
     return float(logp)
 
 
-
 def score_and_predict(model: Any, tok: Any, text: str, task: str) -> dict[str, Any]:
-    """Score text and predict label using log probability difference."""
+    """
+    Predict a label and calculate a confidence score for a given text.
+
+    The score is calculated as the log probability difference between the
+    positive and negative label options.
+
+    Parameters
+    ----------
+    model : Any
+        The loaded LLM.
+    tok : Any
+        The tokenizer.
+    text : str
+        The text to be scored.
+    task : str
+        The classification task identifier.
+
+    Returns
+    -------
+    dict[str, Any]
+        Dictionary containing the formatted prompt, confidence score,
+        binary prediction, and individual log probabilities.
+    """
     # Score = log p(pos_label) - log p(neg_label); sign => prediction
     prompt = format_prompt(text, task)
     batch = tok(prompt, return_tensors="pt").to(next(model.parameters()).device)
@@ -150,9 +202,31 @@ def score_and_predict(model: Any, tok: Any, text: str, task: str) -> dict[str, A
 
 def integrated_gradients(
     model: Any, tok: Any, text: str, task: str, steps: int = 32
-) -> tuple[list[str], npt.NDArray[np.floating[Any]], str]:
-    """Compute IG for full multi-token label log-prob difference."""
+) -> tuple[list[str], npt.NDArray[np.floating[Any]], str, float]:
+    """
+    Perform Integrated Gradients to identify which tokens influenced the model output.
 
+    Calculates the importance of each token by integrating gradients along
+    a path from a baseline (zero) input to the actual token embeddings.
+
+    Parameters
+    ----------
+    model : Any
+        The loaded LLM.
+    tok : Any
+        The tokenizer.
+    text : str
+        The text to explain.
+    task : str
+        The classification task.
+    steps : int, default 32
+        The number of integration steps to perform (higher is more accurate).
+
+    Returns
+    -------
+    tuple[list[str], npt.NDArray, str, float]
+        A tuple of (tokens, attribution_scores, full_prompt, model_score).
+    """
     device = next(model.parameters()).device
     model_dtype = next(model.parameters()).dtype
 
@@ -170,13 +244,13 @@ def integrated_gradients(
     neg_ids = tok.encode(neg_label, add_special_tokens=False)
 
     def full_label_logprob(emb: torch.Tensor, label_ids: list[int]) -> torch.Tensor:
-        """
-        Compute log p(full_label | prompt) using teacher forcing.
+        """Compute log p(full_label | prompt) using teacher forcing.
+
         Only prompt embeddings get gradients.
         """
         cur_emb = emb
         cur_attn = attn.clone()
-        total_logprob = 0.0
+        total_logprob = torch.tensor(0.0, device=device, dtype=model_dtype)
 
         for lid in label_ids:
             out = model(inputs_embeds=cur_emb, attention_mask=cur_attn, use_cache=False)
@@ -202,9 +276,7 @@ def integrated_gradients(
         return pos_score - neg_score
 
     # ----- Integrated Gradients -----
-    alphas = torch.linspace(
-        0, 1, steps=steps, device=device, dtype=model_dtype
-    ).view(-1, 1, 1, 1)
+    alphas = torch.linspace(0, 1, steps=steps, device=device, dtype=model_dtype).view(-1, 1, 1, 1)
 
     grads = torch.zeros_like(x)
 
@@ -222,15 +294,27 @@ def integrated_gradients(
 
     with torch.no_grad():
         explained_score = float(score_fn(x))
-        
+
     return tokens, atts.cpu().numpy(), prompt, explained_score
 
 
+def save_heatmap(tokens: list[str], atts: npt.NDArray[np.floating[Any]], out_path: str) -> None:
+    """
+    Create and save a visualization of the token attribution scores.
 
-def save_heatmap(
-    tokens: list[str], atts: npt.NDArray[np.floating[Any]], out_path: str
-) -> None:
-    """Save attribution heatmap as a bar plot."""
+    Parameters
+    ----------
+    tokens : list[str]
+        List of tokens extracted from the text.
+    atts : npt.NDArray
+        Normalization attribution scores for each token.
+    out_path : str
+        File path where the plot image will be saved.
+
+    Returns
+    -------
+    None
+    """
     # Simple bar plot; token strings lightly cleaned for readability
     plt.figure(figsize=(max(6, len(tokens) * 0.2), 2.8))
     plt.bar(range(len(tokens)), atts)
@@ -248,14 +332,23 @@ def save_heatmap(
 
 
 def load_df_safely(path: str) -> pd.DataFrame:
-    """Load DataFrame from Parquet or CSV with fallback."""
+    """
+    Load a dataset while gracefully handling potential format issues.
+
+    Parameters
+    ----------
+    path : str
+        Path to the Parquet or CSV file.
+
+    Returns
+    -------
+    pd.DataFrame
+        The loaded DataFrame.
+    """
     # Attempt Parquet; fallback to CSV if engine missing or read fails
     try:
         if path.endswith(".parquet"):
-            if not (
-                importlib.util.find_spec("pyarrow")
-                or importlib.util.find_spec("fastparquet")
-            ):
+            if not (importlib.util.find_spec("pyarrow") or importlib.util.find_spec("fastparquet")):
                 raise ImportError("No parquet engine (pyarrow/fastparquet) found.")
             return pd.read_parquet(path)
         return pd.read_csv(path)
@@ -265,25 +358,25 @@ def load_df_safely(path: str) -> pd.DataFrame:
 
 
 def main() -> None:
-    """Run zero-shot LLM scoring with optional IG explanations."""
+    """
+    Execute the full zero-shot scoring and interpretability pipeline.
+
+    Orchestrates loading inputs, batch processing predictions through the LLM,
+    optionally computing Integrated Gradients for a subset of samples,
+    and saving results to disk.
+    """
     # Parse CLI, load data/model, loop over rows, optional IG subset
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--in", dest="inp", required=True, help="Parquet/CSV file with a text column"
-    )
+    ap.add_argument("--in", dest="inp", required=True, help="Parquet/CSV file with a text column")
     ap.add_argument("--text_col", required=True)
     ap.add_argument("--task", required=True, choices=list(LABELS.keys()))
     ap.add_argument("--out", required=True)
     ap.add_argument("--model", default="distilgpt2")
     ap.add_argument("--max_rows", type=int, default=2000)
-    ap.add_argument(
-        "--ig_rows", type=int, default=25, help="How many rows to run IG on"
-    )
+    ap.add_argument("--ig_rows", type=int, default=25, help="How many rows to run IG on")
     ap.add_argument("--ig_steps", type=int, default=32)
     ap.add_argument("--save_heatmaps", action="store_true")
-    ap.add_argument(
-        "--label_col", default=None, help="Copy label column from input into preds"
-    )
+    ap.add_argument("--label_col", default=None, help="Copy label column from input into preds")
     ap.add_argument(
         "--id_cols",
         nargs="*",
@@ -331,9 +424,7 @@ def main() -> None:
 
         if args.save_heatmaps and len(ig_records) < args.ig_rows:
             # Only compute IG for first N rows (expensive)
-            toks, atts, prompt = integrated_gradients(
-                model, tok, text, args.task, steps=args.ig_steps
-            )
+            toks, atts, prompt, _ = integrated_gradients(model, tok, text, args.task, steps=args.ig_steps)
             img_path = Path("outputs/ig_heatmaps") / f"row{i}.png"
             save_heatmap(toks, atts, str(img_path))
             ig_records.append({"idx": i, "heatmap": str(img_path), "prompt": prompt})
@@ -342,33 +433,9 @@ def main() -> None:
     outdir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(preds).to_parquet(args.out, index=False)
     if ig_records:
-        pd.DataFrame(ig_records).to_parquet(
-            Path(args.out).with_suffix(".ig.parquet"), index=False
-        )
+        pd.DataFrame(ig_records).to_parquet(Path(args.out).with_suffix(".ig.parquet"), index=False)
     print(f"Saved predictions -> {args.out}")
 
 
 if __name__ == "__main__":
     main()
-
-
-# Summary:
-# Purpose: Zero-shot binary classification (toxicity, hate, offense)
-#   with a causal LM plus token-level Integrated Gradients explanations.
-# Labels: Uses predefined positive/negative label pairs;
-#   score = log p(pos) - log p(neg) via teacher forcing.
-# Prompt: Instruction + text + "Label:" so model predicts one-word label.
-# Prediction: Computes separate label log-prob sums (first few tokens)
-#   and assigns pred based on score sign.
-# IG Explanation: Computes attributions over prompt embeddings using
-#   path integration (zero baseline) on simplified scalar (difference of
-#   first-token log probs of pos vs neg labels) in single forward with
-#   inputs_embeds.
-# Stability: Optional --force_float32 to avoid FP16 LayerNorm issues;
-#   disables use_cache for consistent gradients.
-# Data Loading: Safe Parquet/CSV loader with fallback if no engine.
-# Outputs: Main parquet (pred, score, lp_pos, lp_neg, optional cols)
-#   plus optional IG parquet and heatmap PNG images.
-# Performance controls: --max_rows limits data;
-#   --ig_rows and --ig_steps bound explanation cost.
-# Device selection: Prefers CUDA, then MPS, else CPU.

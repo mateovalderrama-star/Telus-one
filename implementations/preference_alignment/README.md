@@ -4,7 +4,7 @@ This reference implements the **Con-J framework** from:
 
 > - Ye, Z., et al., (2025).
 Learning LLM-as-a-Judge for Preference Alignment.
-https://openreview.net/forum?id=HZVIQE1MsJ
+<https://openreview.net/forum?id=HZVIQE1MsJ>
 
 Con-J trains an LLM to act as a **generative judge** using Direct Preference Optimization (DPO), instead of relying on a scalar reward model.
 
@@ -14,8 +14,8 @@ Traditional preference alignment (e.g., RLHF-style reward models) trains a model
 
 However, as shown in the following figure:
 
-- Scalar models output only a number → ❌ No explanation  
-- They are more susceptible to dataset bias  
+- Scalar models output only a number → ❌ No explanation
+- They are more susceptible to dataset bias
 - They may learn superficial patterns (e.g., verbosity)
 
 Con-J instead trains an **LLM-as-a-Judge** that generates:
@@ -25,12 +25,11 @@ Con-J instead trains an **LLM-as-a-Judge** that generates:
 
 This improves:
 
-- Interpretability  
-- Robustness to bias  
-- Alignment transparency 
+- Interpretability
+- Robustness to bias
+- Alignment transparency
 
 ![Figure 1: Scalar Reward Model vs Generative Judge](assets/Figure1.png)
-
 
 ## Con-J Training Pipeline
 
@@ -39,10 +38,12 @@ The full framework is illustrated in the following figure.
 The process consists of three stages:
 
 ### 1️⃣ Judgment Sampling(Repeated and Hint Sampling)
-Given a prompt `q` and answers `(a₁, a₂)`,  
+
+Given a prompt `q` and answers `(a₁, a₂)`,
 the pretrained LLM generates multiple **judgments with rationales**.
 
 ### 2️⃣ Judgment Filtering
+
 Using ground-truth preference labels, judgments are separated into:
 
 - **Positive judgments** (correct preference)
@@ -51,10 +52,11 @@ Using ground-truth preference labels, judgments are separated into:
 These are paired to form **contrastive judgment pairs**.
 
 ### 3️⃣ Contrastive Training (DPO)
+
 The LLM is trained using:
 
-- **DPO loss** on contrastive pairs  
-- A small **SFT loss** on positive judgments  
+- **DPO loss** on contrastive pairs
+- A small **SFT loss** on positive judgments
 
 This directly optimizes the model to prefer correct judgments while maintaining generation quality.
 
@@ -87,7 +89,8 @@ Download the `.parquet` files using:
 ```bash
 gsutil cp gs://<bucket-name>/reference_implementation_4/*.parquet .
 ```
-*** Do not download the ```train_raw.parquet```, use the ```train_sponsor_filtered.parquet``` for data_sky or ```train_singleturn_sponsor_filtered.parquet``` for data_hh_rlhf ***
+
+***Do not download the ```train_raw.parquet```, use the ```train_sponsor_filtered.parquet``` for data_sky or ```train_singleturn_sponsor_filtered.parquet``` for data_hh_rlhf***
 
 After downloading, place the ```.parquet``` file inside one of the following folders (create the folder if it does not exist):
 ```data_sky/```  or
@@ -133,6 +136,7 @@ These represent a pair of candidate responses where `chosen` is preferred over `
 ```
 
 In this case, set:
+
 - dataset_format = "sky"
 
 #### Format 2 — Raw Conversation String (HH-style)
@@ -145,6 +149,7 @@ In this case, set:
 ```
 
 In this case, set:
+
 - dataset_format = "hh"
 
 ### Adding a New Format
@@ -170,17 +175,17 @@ Once formatted properly, the rest of the pipeline (LLM-as-a-Judge → DPO → Ev
 
 ## Environment Setup
 
-From the **root of the repository**, install the `ref4-llm-alignment-ethics` dependency group using `uv`:
+From the **root of the repository**, install the `preference-alignment` dependency group using `uv`:
 
 ```bash
-uv sync --group ref4-llm-alignment-ethics
+uv sync --group preference-alignment
 source .venv/bin/activate
 ```
 
 > **CUDA note:** `torch==2.6.0` from PyPI includes CUDA support on Linux. If you specifically need the CUDA 12.4 build, run:
 >
 > ```bash
-> uv sync --group ref4-llm-alignment-ethics \
+> uv sync --group preference-alignment \
 >   --index-url https://download.pytorch.org/whl/cu124
 > ```
 
@@ -201,29 +206,28 @@ pip install flash-attn==2.7.3 --no-build-isolation
 - The quality of alignment depends strongly on the judge model and prompt design.
 - Our results might have less win rate since we used only 300 samples for training, for better results use larger amount of data.
 
-
 # Discussion & Conceptual Checkpoints
 
 These questions are intended to help participants reflect on the design choices behind Con-J and DPO.
 
 ### 1. Why does Con-J generate a rationale instead of predicting a scalar reward?
 
-**Answer:**  
+**Answer:**
 Scalar reward models compress evaluation into a single number, which makes their decisions difficult to interpret and audit. Con-J generates both a rationale and a binary decision, increasing transparency and making it easier to detect bias or flawed reasoning.
 
 ### 2. Why is judgment filtering necessary before DPO training?
 
-**Answer:**  
+**Answer:**
 LLM-generated judgments can be inconsistent or biased. Filtering ensures that only correct (positive) judgments are contrasted against incorrect (negative) ones. Without filtering, DPO training could reinforce incorrect reasoning patterns.
 
 ### 3. What advantage does DPO have over RLHF?
 
-**Answer:**  
+**Answer:**
 DPO directly optimizes preference differences without requiring reinforcement learning or PPO-style optimization. It avoids training a separate reward model and is simpler, more stable, and easier to reproduce.
 
 ### 4. How do repeated and hint sampling improve the judge model?
 
-**Answer:**  
+**Answer:**
 Repeated sampling increases diversity in reasoning patterns, while hint sampling encourages informative rationales. This produces stronger contrastive pairs for DPO training and improves robustness.
 
 ### Open Discussion

@@ -18,44 +18,88 @@ Examples of usage:
 # Importing necessary libraries
 import argparse  # For parsing command-line arguments
 import itertools
-import random
 from collections.abc import Generator
 from pathlib import Path  # For working with file paths
-from typing import Any, Iterator, Optional
+from typing import Any
 
 import pandas as pd  # For data manipulation and analysis
-from datasets import (  # For loading datasets from Hugging Face
-    load_dataset,
-)
+from datasets import load_dataset  # For loading datasets from Hugging Face
 
 
 # Utility function to convert a value to a boolean
 def as_bool(x: Any) -> bool:
-    """Convert a value to a boolean."""
+    """
+    Convert a value to a boolean.
+
+    Parameters
+    ----------
+    x : Any
+        The value to convert. Can be a string, integer, or boolean.
+
+    Returns
+    -------
+    bool
+        True if the value represents a truthy condition (e.g., '1', 'true', 'yes'),
+        False otherwise.
+    """
     return str(x).lower() in {"1", "true", "t", "yes", "y"}
 
 
 # Function to save a DataFrame to a Parquet file
 def to_parquet(df: pd.DataFrame, out_path: str) -> None:
-    """Save a DataFrame to a Parquet file."""
+    """
+    Save a pandas DataFrame to a Parquet file.
+
+    This function ensures the parent directories of the output path exist
+    before saving the file. It also prints a summary message upon completion.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to save.
+    out_path : str
+        The file path where the Parquet file should be saved.
+
+    Returns
+    -------
+    None
+    """
     out_path_obj = Path(out_path)  # Convert the output path to a Path object
-    out_path_obj.parent.mkdir(
-        parents=True, exist_ok=True
-    )  # Create parent directories if they don't exist
+    out_path_obj.parent.mkdir(parents=True, exist_ok=True)  # Create parent directories if they don't exist
     df.to_parquet(out_path_obj, index=False)  # Save the DataFrame as a Parquet file
-    print(
-        f"Wrote {len(df):,} rows -> {out_path_obj}"
-    )  # Print the number of rows written
+    print(f"Wrote {len(df):,} rows -> {out_path_obj}")  # Print the number of rows written
 
 
 # Function to load the CivilComments dataset
-def load_civil(
-    stream: bool = False, take: int | None = None, split: str = "train"
-) -> pd.DataFrame:
-    """Load the CivilComments dataset."""
+def load_civil(stream: bool = False, take: int | None = None, split: str = "train") -> pd.DataFrame:
+    """
+    Load the CivilComments dataset from Hugging Face.
+
+    The function supports loading the full dataset or streaming a limited number
+    of rows. It extracts relevant columns like text and various toxicity indicators.
+
+    Parameters
+    ----------
+    stream : bool, default False
+        Whether to use streaming mode for loading the dataset.
+    take : int, optional
+        The number of rows to take when streaming. Required if `stream` is True.
+    split : str, default "train"
+        The dataset split to load (e.g., 'train', 'test', 'validation').
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the normalized CivilComments data.
+
+    Raises
+    ------
+    ValueError
+        If `stream` is True but `take` is not specified.
+    """
     ds = load_dataset(
-        "google/civil_comments", 
-        split=split, 
+        "google/civil_comments",
+        split=split,
         streaming=stream,
     )
     cols_keep = [
@@ -73,7 +117,7 @@ def load_civil(
                 "When using --stream, you must specify --take to limit the number of rows. "
                 "Example: --stream --take 200000"
             )
-    
+
         it_gen: Generator[dict[str, Any], None, None] = (
             {
                 "comment_text": r.get("text", ""),
@@ -86,7 +130,7 @@ def load_civil(
             }
             for r in ds
         )
-    
+
         it = list(itertools.islice(it_gen, take))
         return pd.DataFrame(it)
     # Remove unwanted columns and rename for consistency
@@ -96,7 +140,12 @@ def load_civil(
 
 # Main function to handle command-line arguments and process datasets
 def main() -> None:
-    """Handle command-line arguments and process datasets."""
+    """
+    Handle command-line arguments and process the data downloading pipeline.
+
+    This is the main entry point for the script. it orchestrates loading the
+    specified dataset, optionally downsampling it, and saving it to Parquet.
+    """
     ap = argparse.ArgumentParser()  # Create an argument parser
     ap.add_argument(
         "--dataset",
@@ -104,18 +153,14 @@ def main() -> None:
         choices=["civil"],
     )
     ap.add_argument("--out", required=True)  # Output file path
-    ap.add_argument(
-        "--stream", action="store_true", help="Use streaming mode (good for huge data)."
-    )
+    ap.add_argument("--stream", action="store_true", help="Use streaming mode (good for huge data).")
     ap.add_argument(
         "--take",
         type=int,
         default=None,
         help="With --stream, cap the number of rows to read.",
     )
-    ap.add_argument(
-        "--sample", type=int, default=None, help="Downsample to N rows after load."
-    )
+    ap.add_argument("--sample", type=int, default=None, help="Downsample to N rows after load.")
     args = ap.parse_args()  # Parse command-line arguments
 
     # Load the appropriate dataset based on the argument

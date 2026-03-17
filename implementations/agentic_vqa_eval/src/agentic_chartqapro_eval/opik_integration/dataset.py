@@ -1,13 +1,14 @@
 """Register ChartQAPro samples as an Opik Dataset.
 
 Usage:
-    python -m agentic_chartqapro_eval.opik_integration.dataset \
+    uv run --env-file .env -m agentic_chartqapro_eval.opik_integration.dataset \
         --split test --n 25
 """
 
 import argparse
 from typing import Optional
 
+from ..datasets.chartqapro_loader import load_chartqapro
 from .client import get_client
 
 
@@ -16,9 +17,24 @@ def register_dataset(
     dataset_name: str = "ChartQAPro",
     split: str = "test",
 ) -> Optional[object]:
-    """Insert PerceivedSamples into an Opik Dataset named ``{dataset_name}_{split}``.
+    """
+    Upload a collection of samples as an Opik Dataset.
 
-    Returns the Dataset object, or None if Opik is unavailable.
+    Allows for versioned dataset management and evaluation in the Opik UI.
+
+    Parameters
+    ----------
+    samples : list of PerceivedSample
+        The data samples to register.
+    dataset_name : str, default 'ChartQAPro'
+        The base name for the dataset.
+    split : str, default 'test'
+        The split identifier (e.g., 'train', 'val').
+
+    Returns
+    -------
+    Dataset or None
+        The Opik Dataset object if successful.
     """
     client = get_client()
     if client is None:
@@ -47,21 +63,21 @@ def register_dataset(
 
 
 def main() -> None:
-    """Register ChartQAPro dataset samples in Opik."""
-    parser = argparse.ArgumentParser(
-        description="Register ChartQAPro samples as Opik dataset"
-    )
+    """
+    Command-line interface for registering ChartQAPro datasets.
+
+    Returns
+    -------
+    None
+    """
+    parser = argparse.ArgumentParser(description="Register ChartQAPro samples as Opik dataset")
     parser.add_argument("--split", default="test")
     parser.add_argument("--n", type=int, default=25)
     parser.add_argument("--image_dir", default="data/chartqapro_images")
     parser.add_argument("--cache_dir", default=None)
     args = parser.parse_args()
 
-    from ..datasets.chartqapro_loader import load_chartqapro
-
-    samples = load_chartqapro(
-        split=args.split, n=args.n, image_dir=args.image_dir, cache_dir=args.cache_dir
-    )
+    samples = load_chartqapro(split=args.split, n=args.n, image_dir=args.image_dir, cache_dir=args.cache_dir)
     register_dataset(samples, split=args.split)
 
 

@@ -6,6 +6,9 @@ Scores five rubric dimensions (0.0–1.0) using a text LLM.
 import os
 from typing import Optional
 
+from google import genai
+from openai import OpenAI
+
 from ..utils.json_strict import parse_strict
 
 
@@ -50,13 +53,38 @@ _JUDGE_KEYS = [
 
 
 def _default_scores() -> dict:
+    """
+    Generate a baseline scores dictionary with all metrics set to zero.
+
+    Returns
+    -------
+    dict
+        The initialized scores mapping.
+    """
     return dict.fromkeys(_JUDGE_KEYS, 0.0)
 
 
 def _call_llm(prompt: str, backend: str, model: str, api_key: Optional[str]) -> str:
-    if backend == "openai":
-        from openai import OpenAI
+    """
+    Send a judging prompt to the specified backend.
 
+    Parameters
+    ----------
+    prompt : str
+        The evaluation rubric and data.
+    backend : {'openai', 'gemini'}
+        The model provider.
+    model : str
+        The specific model name.
+    api_key : str, optional
+        Provider API key.
+
+    Returns
+    -------
+    str
+        The model's textual assessment.
+    """
+    if backend == "openai":
         client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY", ""))
         resp = client.chat.completions.create(
             model=model,
@@ -67,11 +95,9 @@ def _call_llm(prompt: str, backend: str, model: str, api_key: Optional[str]) -> 
         return resp.choices[0].message.content or ""
 
     if backend == "gemini":
-        import google.generativeai as genai
-
-        genai.configure(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
-        m = genai.GenerativeModel(model)
-        return m.generate_content(prompt).text or ""
+        client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
+        resp = client.models.generate_content(model=model, contents=prompt)
+        return resp.text or ""
 
     raise ValueError(f"Unknown judge backend: {backend!r}")
 
@@ -82,7 +108,27 @@ def judge_mep(
     model: str = "gemini-2.5-flash-lite",
     api_key: Optional[str] = None,
 ) -> dict:
-    """Run LLM judge on a single MEP dict. Returns a scores dict."""
+    """
+    Score the quality of a single agent execution record.
+
+    Uses an LLM to evaluate faithfulness, plan adherence, and groundedness.
+
+    Parameters
+    ----------
+    mep : dict
+        The execution trace to judge.
+    backend : str, default 'gemini'
+        The provider for the judge model.
+    model : str, default 'gemini-2.5-flash-lite'
+        The model name.
+    api_key : str, optional
+        API key for the judge.
+
+    Returns
+    -------
+    dict
+        A dictionary of numeric scores and qualitative reasoning.
+    """
     sample = mep.get("sample", {})
     plan = mep.get("plan", {}).get("parsed", {})
     vision = mep.get("vision", {})
@@ -94,9 +140,7 @@ def judge_mep(
     agent_explanation = parsed_vision.get("explanation", "")
     plan_steps = plan.get("steps", [])
 
-    steps_text = (
-        "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(plan_steps)) or "  (none)"
-    )
+    steps_text = "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(plan_steps)) or "  (none)"
 
     prompt = _JUDGE_PROMPT.format(
         question=question or "unknown",

@@ -217,10 +217,10 @@ src/agentic_chartqapro_eval/
 
 ### 1. Install dependencies
 
-From the **root of the repository**, install the `ref6-agentic-xai-eval` dependency group using `uv`:
+From the **root of the repository**, install the `agentic-xai-eval` dependency group using `uv`:
 
 ```bash
-uv sync --group ref6-agentic-xai-eval
+uv sync --group agentic-xai-eval
 source .venv/bin/activate
 ```
 
@@ -240,7 +240,7 @@ cp .env.example .env
 Run on 25 test samples using GPT-4o for planner, vision, and verifier:
 
 ```bash
-python -m agentic_chartqapro_eval.runner.run_generate_meps \
+uv run --env-file .env -m agentic_chartqapro_eval.runner.run_generate_meps \
     --split test \
     --n 25 \
     --config gemini_gemini \
@@ -252,7 +252,7 @@ MEPs are written to `meps/gemini_gemini/chartqapro/test/<sample_id>.json`.
 
 The **VerifierAgent (Pass 2.5)** runs automatically after the VisionAgent on every sample. To skip it (faster, lower cost):
 ```bash
-python -m agentic_chartqapro_eval.runner.run_generate_meps \
+uv run --env-file .env -m agentic_chartqapro_eval.runner.run_generate_meps \
     --split test --n 25 --config gemini_gemini --no_verifier
 ```
 
@@ -260,7 +260,7 @@ python -m agentic_chartqapro_eval.runner.run_generate_meps \
 
 **Model overrides** (e.g. to test different models without changing config):
 ```bash
-python -m agentic_chartqapro_eval.runner.run_generate_meps \
+uv run --env-file .env -m agentic_chartqapro_eval.runner.run_generate_meps \
     --split test --n 25 --config gemini_gemini \
     --planner_model gemini-2.5-flash-lite \
     --vision_model gemini-2.5-flash-lite \
@@ -275,14 +275,14 @@ OCR is **enabled by default** and uses the same vision backend and model as the 
 
 To run with OCR using a cheaper model (recommended — OCR is simpler than full VQA):
 ```bash
-python -m agentic_chartqapro_eval.runner.run_generate_meps \
+uv run --env-file .env -m agentic_chartqapro_eval.runner.run_generate_meps \
     --split test --n 25 --config gemini_gemini \
     --ocr_model gemini-2.5-flash-lite
 ```
 
 To disable OCR entirely (matches the original pipeline behaviour, faster and lower cost):
 ```bash
-python -m agentic_chartqapro_eval.runner.run_generate_meps \
+uv run --env-file .env -m agentic_chartqapro_eval.runner.run_generate_meps \
     --split test --n 25 --config gemini_gemini --no_ocr
 ```
 
@@ -293,7 +293,7 @@ When OCR is skipped, `"ocr": null` appears in the MEP and `"ocr_ms": 0.0` in tim
 ### 4. Evaluate outputs (Pass 1 — accuracy + judge)
 
 ```bash
-python -m agentic_chartqapro_eval.eval.eval_outputs \
+uv run --env-file .env -m agentic_chartqapro_eval.eval.eval_outputs \
     --mep_dir meps/gemini_gemini/chartqapro/test \
     --out output/metrics.jsonl \
     --no_judge          # omit this flag to enable LLM judge (costs API calls)
@@ -310,7 +310,7 @@ The `predicted` column always reflects the **final answer** — the verifier's o
 ### 5. Evaluate traces (Pass 2 — latency and replayability)
 
 ```bash
-python -m agentic_chartqapro_eval.eval.eval_traces \
+uv run --env-file .env -m agentic_chartqapro_eval.eval.eval_traces \
     --mep_dir meps/gemini_gemini/chartqapro/test \
     --out output/trace_metrics.jsonl
 ```
@@ -320,7 +320,7 @@ python -m agentic_chartqapro_eval.eval.eval_traces \
 Re-queries the VLM for each MEP asking for the 3 most likely candidate answers:
 
 ```bash
-python -m agentic_chartqapro_eval.eval.eval_topk \
+uv run --env-file .env -m agentic_chartqapro_eval.eval.eval_topk \
     --mep_dir meps/gemini_gemini/chartqapro/test \
     --out output/topk_metrics.jsonl \
     --backend gemini \
@@ -333,7 +333,7 @@ This pass does **not** modify existing MEPs or `metrics.jsonl`.
 ### 7. Summarize results
 
 ```bash
-python -m agentic_chartqapro_eval.eval.summarize \
+uv run --env-file .env -m agentic_chartqapro_eval.eval.summarize \
     --metrics output/metrics.jsonl \
     --out output/summary.csv
 ```
@@ -343,7 +343,7 @@ python -m agentic_chartqapro_eval.eval.summarize \
 This pass asks **why** the agent was wrong, not just **that** it was wrong. A VLM is given the original chart image alongside the wrong answer, the correct answer, the agent's explanation, and the inspection plan — so it can make a *visual* diagnosis of the failure mode.
 
 ```bash
-python -m agentic_chartqapro_eval.eval.error_taxonomy \
+uv run --env-file .env -m agentic_chartqapro_eval.eval.error_taxonomy \
     --mep_dir meps/gemini_gemini/chartqapro/test \
     --metrics_file output/metrics.jsonl \
     --out output/taxonomy.jsonl
@@ -403,7 +403,7 @@ for sid in revised:
 Generates a single portable HTML file with summary cards, accuracy tables, verifier stats, failure taxonomy breakdown, and a per-sample results table:
 
 ```bash
-python -m agentic_chartqapro_eval.eval.report \
+uv run --env-file .env -m agentic_chartqapro_eval.eval.report \
     --metrics output/metrics.jsonl \
     --taxonomy output/taxonomy.jsonl \
     --out output/report.html
@@ -617,13 +617,13 @@ The framework auto-detects this variable. If it is absent, all Opik calls are si
 Run once before starting experiments. This creates versioned entries for `planner.txt` and `vision.txt` in the Opik Prompt Library so every future experiment links to the exact prompt version used.
 
 ```bash
-python -m agentic_chartqapro_eval.opik_integration.prompts
+uv run --env-file .env -m agentic_chartqapro_eval.opik_integration.prompts
 ```
 
 ### 5. Register the dataset
 
 ```bash
-python -m agentic_chartqapro_eval.opik_integration.dataset \
+uv run --env-file .env -m agentic_chartqapro_eval.opik_integration.dataset \
     --split test --n 25
 ```
 
@@ -638,7 +638,7 @@ No extra flags needed. When `OPIK_URL_OVERRIDE` is set, the pipeline automatical
 - stores the `opik_trace_id` in the MEP for later score attachment
 
 ```bash
-python -m agentic_chartqapro_eval.runner.run_generate_meps \
+uv run --env-file .env -m agentic_chartqapro_eval.runner.run_generate_meps \
     --split test --n 25 --config gemini_gemini --workers 4 --out meps/
 ```
 
@@ -647,7 +647,7 @@ python -m agentic_chartqapro_eval.runner.run_generate_meps \
 After running `eval_outputs.py`, accuracy and judge scores are automatically written back to the Opik traces:
 
 ```bash
-python -m agentic_chartqapro_eval.eval.eval_outputs \
+uv run --env-file .env -m agentic_chartqapro_eval.eval.eval_outputs \
     --mep_dir meps/gemini_gemini/chartqapro/test \
     --out metrics.jsonl
 ```
@@ -657,7 +657,7 @@ python -m agentic_chartqapro_eval.eval.eval_outputs \
 If you have MEPs from runs before Opik was configured, import them without re-running the pipeline:
 
 ```bash
-python -m agentic_chartqapro_eval.opik_integration.ingest \
+uv run --env-file .env -m agentic_chartqapro_eval.opik_integration.ingest \
     --mep_dir meps/gemini_gemini/chartqapro/test \
     --metrics_file metrics.jsonl   # optional: attaches scores if available
 ```

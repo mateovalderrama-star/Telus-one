@@ -20,7 +20,11 @@ UNANSWERABLE_ANSWERS = {
 
 
 class QuestionType(str, Enum):
-    """Question type categories. These can be used for analysis and prompting."""
+    """
+    Internal taxonomy for different vision-language task categories.
+
+    Used for routing logic and evaluation grouping.
+    """
 
     STANDARD = "standard"
     MCQ = "mcq"
@@ -31,7 +35,28 @@ class QuestionType(str, Enum):
 
 @dataclass
 class PerceivedSample:
-    """A unified representation for a single sample in a vision QA dataset."""
+    """
+    Standardized container for vision-language data points.
+
+    Attributes
+    ----------
+    sample_id : str
+        Unique identifier.
+    image_path : str
+        Disk path to the associated chart image.
+    question : str
+        The user text prompt.
+    expected_output : str
+        The ground-truth answer.
+    question_type : QuestionType
+        The task category.
+    choices : list of str, optional
+        Possible MCQ options.
+    context : list of dict, optional
+        Multimodal conversation history.
+    metadata : dict
+        Additional unstructured data fields.
+    """
 
     sample_id: str
     image_path: str  # local path to saved image
@@ -39,20 +64,28 @@ class PerceivedSample:
     expected_output: str  # canonical; UNANSWERABLE_TOKEN for unanswerable
     question_type: QuestionType
     choices: Optional[List[str]] = None  # MCQ option texts
-    context: Optional[List[dict]] = (
-        None  # [{"role": "user"|"assistant", "content": "..."}]
-    )
+    context: Optional[List[dict]] = None  # [{"role": "user"|"assistant", "content": "..."}]
     metadata: dict = field(default_factory=dict)
 
     def is_unanswerable(self) -> bool:
-        """Determine if the sample is unanswerable based on the expected output."""
+        """
+        Check if the ground truth indicates the image is unanswerable.
+
+        Returns
+        -------
+        bool
+            True if the 'expected_output' is the canonical 'UNANSWERABLE' token.
+        """
         return self.expected_output.strip().upper() == UNANSWERABLE_TOKEN
 
     def to_dict(self) -> dict:
-        """Convert the PerceivedSample to a dictionary.
+        """
+        Serialize the sample data into a standard Python dictionary.
 
-        Useful for serialization, logging, or passing data to other
-        components.
+        Returns
+        -------
+        dict
+            The sample fields as key-value pairs.
         """
         return {
             "sample_id": self.sample_id,

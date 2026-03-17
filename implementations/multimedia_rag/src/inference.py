@@ -19,21 +19,35 @@ from src.model.avrag import (  # noqa: E402
 )
 
 
-def run_frame_evidence_analysis(
-    rag, j_res, t_embed, video_paths, audio_paths, m=16, topk_frames=5, gamma=10.0
-):
+def run_frame_evidence_analysis(rag, j_res, t_embed, video_paths, audio_paths, m=16, topk_frames=5, gamma=10.0):
     """
-    Frame-level evidence analysis using SFS and naive top-K selection.
+    Apply frame-level evidence analysis using Sequential Feature Selection (SFS).
 
-    Args:
-    - rag: The RAG model instance.
-    - j_res: Retrieval results containing top-1 video IDs per query.
-    - t_embed: Text embeddings for the queries.
-    - video_paths: List of all video file paths.
-    - audio_paths: List of all audio file paths.
-    - m: Number of frames to sample from the video.
-    - topk_frames: Number of top frames to select for analysis.
-    - gamma: Hyperparameter for SFS selection.
+    This function samples frames and audio windows from retrieved videos,
+    calculates their relevance to the queries, and visualizes the results.
+
+    Parameters
+    ----------
+    rag : object
+        The RAG model instance used for encoding and selection.
+    j_res : list of dict
+        Retrieval results containing the top-1 video IDs for each query.
+    t_embed : dict
+        Text embeddings of the input queries.
+    video_paths : list of str
+        Full file paths for all available videos.
+    audio_paths : list of str
+        Full file paths for all available audios.
+    m : int, default 16
+        The total number of frames to sample from each video.
+    topk_frames : int, default 5
+        The number of highest-scoring frames to select.
+    gamma : float, default 10.0
+        Hyperparameter controlling the diversity in SFS selection.
+
+    Returns
+    -------
+    None
     """
     print("\n================ Frame-Level Evidence Analysis ================")
 
@@ -121,29 +135,42 @@ def process_retrieved_files(
     default_topic=None,
 ):
     """
-    Process retrieved files and generate answers using the model.
+    Generate answers for a set of retrieved video segments.
 
-    Args:
-    - retrieved_files (list): List of retrieved file identifiers.
-    - question (str): The question to be answered.
-    - root_data_dir (str): Root directory containing the data.
-    - segment_suffix (str): Suffix for segmented media directories (e.g., "30s").
-    - model: The multimodal model to use for generating answers.
-    - bsz (int): Batch size for processing.
-    - default_topic (str, optional): Default topic to use if not specified in
-      the retrieved file name.
+    This function locates the physical files for each retrieved segment ID,
+    prepares them for the model, and runs inference to obtain text answers.
+
+    Parameters
+    ----------
+    retrieved_files : list
+        Identifiers for the videos retrieved for a given question.
+    question : str
+        The user's question to be answered by the model.
+    root_data_dir : str
+        The base directory where all topic folders are stored.
+    segment_suffix : str
+        The duration suffix for segmented directories (e.g., '30s').
+    model : object
+        The multimodal LLM used to generate answers.
+    bsz : int
+        Processing batch size.
+    default_topic : str, optional
+        Topic name to use if the ID doesn't contain one. Required for local IDs.
 
     Returns
     -------
-    - dict: A dictionary mapping retrieved file identifiers to generated answers.
+    dict
+        A mapping of file identifiers to their generated text responses.
+
+    Raises
+    ------
+    ValueError
+        If a local ID is provided without a `default_topic`.
     """
     agent_answers = {}
 
     for retrieved_item in retrieved_files:
-        if isinstance(retrieved_item, dict):
-            retrieved_file = retrieved_item["file"]
-        else:
-            retrieved_file = retrieved_item
+        retrieved_file = retrieved_item["file"] if isinstance(retrieved_item, dict) else retrieved_item
 
         # ---- Detect global vs local ----
         parts = retrieved_file.split("__")
@@ -204,19 +231,30 @@ def process_retrieved_files(
 
 def process_question(source, root_data_dir, segment_suffix, model, bsz, topic):
     """
-    Process a single question using hybrid pipeline.
+    Handle the logical flow for answering a single question.
 
-    Args:
-    - source (dict): A dictionary containing the question and retrieved files.
-    - root_data_dir (str): Root directory containing the data.
-    - segment_suffix (str): Suffix for segmented media directories (e.g., "30s").
-    - model: The multimodal model to use for generating answers.
-    - bsz (int): Batch size for processing.
-    - topic (str): Default topic to use if not specified in the retrieved file name.
+    Aggregates the retrieved segments for a question and initiates the
+    inference process to gather individual agent responses.
+
+    Parameters
+    ----------
+    source : dict
+        A dictionary containing the question string and its retrieved segments.
+    root_data_dir : str
+        Base directory containing the multimedia data.
+    segment_suffix : str
+        Directory suffix for segment storage.
+    model : object
+        The model used for answer generation.
+    bsz : int
+        Batch size for inference.
+    topic : str
+        Topic name for the question.
 
     Returns
     -------
-    - dict: The input source dictionary augmented with generated answers.
+    dict
+        The updated `source` dictionary containing an additional 'agent_answers' key.
     """
     question = source["question"]
     retrieved_files = source["retrieved_file"]

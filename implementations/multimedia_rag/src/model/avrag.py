@@ -20,13 +20,17 @@ decord.bridge.set_bridge("torch")
 
 def get_first_k(dir_path, ext, k):
     """Return the first k sorted file paths in dir_path matching the given extension."""
-    return sorted(
-        os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.endswith(ext)
-    )[:k]
+    return sorted(os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.endswith(ext))[:k]
 
 
 class AVRAG:
-    """Audio-Visual Retrieval-Augmented Generation model using ImageBind embeddings."""
+    """
+    Audio-Visual Retrieval-Augmented Generation retrieval engine.
+
+    Uses ImageBind to create cross-modal embeddings for video, audio, and
+    text. This engine manages the alignment and scoring of multi-modal
+    segments against user queries.
+    """
 
     def __init__(self, model_path=None, bsz=128):
         """Initialize AVRAG with an optional pretrained model path and batch size."""
@@ -54,20 +58,25 @@ class AVRAG:
     @torch.no_grad()
     def encode(self, input_paths, data_type, cache=False, save_cache=False, cache_path=None) -> dict:  # noqa: PLR0912
         """
-        Encode input paths into embeddings using ImageBind.
+        Convert diverse input media into numerical embeddings.
 
-        Args:
-            input_paths (str or list): Paths to the input data.
-            cache (bool): If True, loads the embeddings from a cache file.
-            save_cache (bool): If True, saves embeddings to cache file.
-            cache_path (str, optional): Custom path for cache file. If None, uses default location.
+        Parameters
+        ----------
+        input_paths : str or list of str
+            File paths or raw text strings to be encoded.
+        data_type : ModalityType
+            The modality of the input (VISION, AUDIO, or TEXT).
+        cache : bool, default False
+            If True, load existing embeddings from disk instead of re-encoding.
+        save_cache : bool, default False
+            If True, write the computed embeddings to a file for later use.
+        cache_path : str, optional
+            Target file path for saving/loading the cache.
 
         Returns
         -------
-            Dict: {
-                filename: list,
-                embeddings: torch.Tensor,
-            }
+        dict
+            A dictionary containing 'filename' and 'embeddings' tensors.
         """
         if cache:
             assert input_paths.endswith(".pt")
@@ -83,11 +92,7 @@ class AVRAG:
                     exts = ()
 
                 input_paths = sorted(
-                    [
-                        os.path.join(input_paths, f)
-                        for f in os.listdir(input_paths)
-                        if f.endswith(exts)
-                    ]
+                    [os.path.join(input_paths, f) for f in os.listdir(input_paths) if f.endswith(exts)]
                 )
             else:
                 input_paths = [input_paths]
@@ -101,15 +106,11 @@ class AVRAG:
             if data_type == ModalityType.VISION:
                 indice = 1 if input_batch[0].endswith(".mp4") else 0
                 inputs = {
-                    data_type: self.load_and_transform_func[data_type][indice](
-                        input_batch, self.device
-                    ),
+                    data_type: self.load_and_transform_func[data_type][indice](input_batch, self.device),
                 }
             else:
                 inputs = {
-                    data_type: self.load_and_transform_func[data_type](
-                        input_batch, self.device
-                    ),
+                    data_type: self.load_and_transform_func[data_type](input_batch, self.device),
                 }
 
             # KEEP ON GPU
@@ -120,9 +121,7 @@ class AVRAG:
 
         # ---- Safer filename handling ----
         if data_type != ModalityType.TEXT:
-            filenames = [
-                os.path.splitext(os.path.basename(path))[0] for path in input_paths
-            ]
+            filenames = [os.path.splitext(os.path.basename(path))[0] for path in input_paths]
         else:
             # Avoid using raw query string as filename
             filenames = [f"text_{i}" for i in range(len(input_paths))]
@@ -144,7 +143,19 @@ class AVRAG:
         return result
 
     def _parse_srt(self, srt_path: str) -> str:
-        """Parse an SRT file and return its text content as a single string."""
+        """
+        Extract the plain text from an SRT file, ignoring timestamps.
+
+        Parameters
+        ----------
+        srt_path : str
+            The path to the source .srt file.
+
+        Returns
+        -------
+        str
+            The combined text contents of all subtitle blocks.
+        """
         lines = []
         with open(srt_path, "r", encoding="utf-8", errors="ignore") as f:
             for raw_line in f:
@@ -161,19 +172,26 @@ class AVRAG:
     @torch.no_grad()
     def encode_srt_dir(self, srt_dir: str, cache: bool = False) -> dict:
         """
-        Build caption vocab from .srt files in a directory.
+        Process a directory of SRT files into a text-based vocabulary.
 
-        Returns dict with keys: filename, embeddings
-        filename is the basename without extension (same convention as audio/video).
+        Parameters
+        ----------
+        srt_dir : str
+             Directory containing .srt files.
+        cache : bool, default False
+             Whether to load from a pre-computed .pt file.
+
+        Returns
+        -------
+        dict
+            A dictionary with IDs and text embeddings.
         """
         if cache:
             # caller passes .pt file path in srt_dir in this mode
             assert srt_dir.endswith(".pt")
             return torch.load(srt_dir)
 
-        srt_paths = sorted(
-            os.path.join(srt_dir, f) for f in os.listdir(srt_dir) if f.endswith(".srt")
-        )
+        srt_paths = sorted(os.path.join(srt_dir, f) for f in os.listdir(srt_dir) if f.endswith(".srt"))
         if len(srt_paths) == 0:
             raise ValueError(f"No .srt files found in {srt_dir}")
 
@@ -183,28 +201,33 @@ class AVRAG:
         cap_embed = self.encode(texts, ModalityType.TEXT, cache=False)
 
         # Replace filenames (currently texts) with the .srt basenames for alignment
-        cap_embed["filename"] = [
-            os.path.splitext(os.path.basename(p))[0] for p in srt_paths
-        ]
+        cap_embed["filename"] = [os.path.splitext(os.path.basename(p))[0] for p in srt_paths]
 
         # Optional cache next to srt_dir
-        torch.save(
-            cap_embed, os.path.join(os.path.dirname(srt_dir), "caption_embeddings.pt")
-        )
+        torch.save(cap_embed, os.path.join(os.path.dirname(srt_dir), "caption_embeddings.pt"))
         return cap_embed
 
     def topk(self, queries, vocabs, k=1, log=True):
         """
-        Return the top-k vocabulary items most similar to each query.
+        Identify the most similar items in a vocabulary for a set of queries.
 
-        Args:
-            queries (torch.Tensor, (n, d)): Query embeddings.
-            vocabs (torch.Tensor, (m, d)): Vocabulary embeddings.
-            k (int): Number of top results to return.
+        Parameters
+        ----------
+        queries : torch.Tensor
+            Embeddings of shape (n, d) representing the queries.
+        vocabs : torch.Tensor
+            Embeddings of shape (m, d) representing the vocabulary candidates.
+        k : int, default 1
+            Number of top results to retrieve.
+        log : bool, default True
+            If True, prints the results to the console.
 
         Returns
         -------
-            List (n, k): Top k results.
+        indices : torch.Tensor
+             The indices of the top-k items.
+        values : torch.Tensor
+             The similarity scores for the top-k items.
         """
         q = torch.nn.functional.normalize(queries, dim=-1)
         v = torch.nn.functional.normalize(vocabs, dim=-1)
@@ -225,10 +248,24 @@ class AVRAG:
         return indices, values
 
     def pair_rag(self, query=None, vocab=None, k=1):
-        """Retrieve top-k vocabulary items for each query via pairwise similarity."""
-        topk_indices, topk_values = self.topk(
-            query["embeddings"], vocab["embeddings"], k=k
-        )
+        """
+        Perform simple retrieval by matching queries to a single modality.
+
+        Parameters
+        ----------
+        query : dict
+            Dictionary containing query names and embeddings.
+        vocab : dict
+            Dictionary containing item names and their embeddings.
+        k : int, default 1
+            Number of results to return.
+
+        Returns
+        -------
+        list of dict
+            A list of retrieval results formatted for ranking.
+        """
+        topk_indices, topk_values = self.topk(query["embeddings"], vocab["embeddings"], k=k)
 
         topk_files = []
 
@@ -250,9 +287,30 @@ class AVRAG:
 
     def joint_rag(self, query, vocab_vision, vocab_audio, vocab_caption, k=1, mode="0"):
         """
-        Run joint AV-RAG retrieval combining audio-visual and caption similarities.
+        Execute joint multi-modal retrieval (AV-RAG).
 
-        Mode '0': paper-faithful AV-RAG with caption averaging.
+        Combines information from video, audio, and captions to find the
+        best matching video segments for a given text query.
+
+        Parameters
+        ----------
+        query : dict
+            The input query embeddings.
+        vocab_vision : dict
+            Source video segment embeddings.
+        vocab_audio : dict
+            Source audio segment embeddings.
+        vocab_caption : dict
+            Source caption (SRT) embeddings.
+        k : int, default 1
+            The number of top segments to return.
+        mode : str, default '0'
+            The retrieval strategy version.
+
+        Returns
+        -------
+        list of dict
+            Ranked segments aligned by filename.
         """
         if mode != "0":
             raise NotImplementedError("Only mode '0' supported.")
@@ -330,9 +388,19 @@ class AVRAG:
     # -----------------------------
     def sfs_select_indices(self, Q: torch.Tensor, k: int) -> list[int]:  # noqa: N803
         """
-        Select k indices from m candidates using paper Algorithm 1 (DP).
+        Solve the SFS optimization problem using dynamic programming.
 
-        Given Q (m x m), returns selected indices (length k) in increasing order.
+        Parameters
+        ----------
+        Q : torch.Tensor
+            The square quality matrix of shape (m, m).
+        k : int
+            The number of indices to select.
+
+        Returns
+        -------
+        list of int
+            The optimal set of indices chosen from the candidate set.
         """
         assert Q.dim() == 2 and Q.shape[0] == Q.shape[1], "Q must be square (m x m)"
         m = Q.shape[0]
@@ -381,10 +449,23 @@ class AVRAG:
     # ---------------------------------------
     def build_sfs_Q(self, z: torch.Tensor, gamma: float = 10.0) -> torch.Tensor:  # noqa: N802
         """
-        Build the SFS quality matrix Q from candidate embeddings.
+        Construct the SFS quality matrix Q.
 
-        z: (m, d) candidate embeddings (paper: Hadamard fused AV per sampled frame).
-        Returns Q: (m, m).
+        The matrix balances visual similarity with a temporal diversity
+        penalty to ensure the selected frames are both relevant and
+        spread through the clip.
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            Embeddings of shape (m, d) for candidate frames.
+        gamma : float, default 10.0
+            Weight of the temporal penalty term.
+
+        Returns
+        -------
+        torch.Tensor
+            The resulting (m, m) quality matrix.
         """
         assert z.dim() == 2, "z must be (m, d)"
         m = z.shape[0]
@@ -410,10 +491,21 @@ class AVRAG:
     # ---------------------------------------
     def sfs(self, candidate_z: torch.Tensor, k: int, gamma: float = 10.0) -> list[int]:
         """
-        Select salient frame indices from candidate embeddings.
+        Select salient frames from video embeddings (SFS).
 
-        candidate_z: (m, d) embeddings for m sampled frames.
-        Returns: indices into the m candidates.
+        Parameters
+        ----------
+        candidate_z : torch.Tensor
+            Available frame embeddings.
+        k : int
+            Number of frames to output.
+        gamma : float, default 10.0
+            Temporal penalty factor.
+
+        Returns
+        -------
+        list of int
+            List of the selected frame indices.
         """
         Q = self.build_sfs_Q(candidate_z, gamma=gamma)  # noqa: N806
         return self.sfs_select_indices(Q, k=k)
@@ -421,16 +513,21 @@ class AVRAG:
 
 def sample_frames(video_path, m=16):
     """
-    Sample m frames uniformly from a video.
+    Sample a fixed set of frames spaced evenly across a video.
 
-    Args:
-        video_path (str): Path to the video file
-        m (int): Number of frames to sample
+    Parameters
+    ----------
+    video_path : str
+        Path to the source video file.
+    m : int, default 16
+        The number of frames to extract.
 
     Returns
     -------
-        tuple: (frames, indices) where frames is a tensor of shape (m, H, W, C)
-               and indices is a tensor of frame indices
+    frames : torch.Tensor
+        The sampled frames with shape (m, H, W, C).
+    indices : torch.Tensor
+        The original indices of the sampled frames.
     """
     vr = decord.VideoReader(video_path)
     total = len(vr)
@@ -444,15 +541,19 @@ def sample_frames(video_path, m=16):
 
 def encode_frames_with_imagebind(rag, frames):
     """
-    Encode video frames using ImageBind vision encoder.
+    Generate vision embeddings for individual video frames.
 
-    Args:
-        rag (AVRAG): The AVRAG model instance
-        frames (torch.Tensor): Tensor of video frames with shape (m, H, W, C)
+    Parameters
+    ----------
+    rag : AVRAG
+        The AVRAG engine instance.
+    frames : torch.Tensor
+        The frame tensors to encode.
 
     Returns
     -------
-        torch.Tensor: Vision embeddings for the frames
+    torch.Tensor
+        The vision embeddings for the input frames.
     """
     # Create temporary directory for frame images and ensure cleanup afterwards
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -471,17 +572,23 @@ def encode_frames_with_imagebind(rag, frames):
 
 def sample_audio_windows(audio_path, frame_indices, video_fps, window_sec=2.0):
     """
-    Extract audio windows corresponding to sampled video frames.
+    Extract audio clips aligned with specific video frame indices.
 
-    Args:
-        audio_path (str): Path to the audio file
-        frame_indices (torch.Tensor): Frame indices from video sampling
-        video_fps (float): Video frames per second
-        window_sec (float): Duration of audio window in seconds (default: 2.0)
+    Parameters
+    ----------
+    audio_path : str
+        Path to the source audio file.
+    frame_indices : torch.Tensor
+        The indices of the video frames focused on.
+    video_fps : float
+        The playback rate of the video.
+    window_sec : float, default 2.0
+        The width of the audio window in seconds centered on each frame.
 
     Returns
     -------
-        list: List of audio clips (torch.Tensor) corresponding to each frame
+    list of torch.Tensor
+        A list of audio waveform clips.
     """
     # Load audio waveform
     waveform, sr = torchaudio.load(audio_path)
@@ -567,9 +674,7 @@ if __name__ == "__main__":
     print("Encoding captions...")
     caption_texts = [rag._parse_srt(p) for p in caption_paths]
     c_embed = rag.encode(caption_texts, ModalityType.TEXT)
-    c_embed["filename"] = [
-        os.path.splitext(os.path.basename(p))[0] for p in caption_paths
-    ]
+    c_embed["filename"] = [os.path.splitext(os.path.basename(p))[0] for p in caption_paths]
 
     # -------------------------------------------------
     # Joint Retrieval

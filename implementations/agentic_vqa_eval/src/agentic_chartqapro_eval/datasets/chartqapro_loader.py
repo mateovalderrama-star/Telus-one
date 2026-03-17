@@ -11,8 +11,13 @@ Columns:
 """
 
 import re
+import shutil
 from pathlib import Path
 from typing import List, Optional
+
+import numpy as np
+from datasets import load_dataset
+from PIL import Image as PILImage
 
 from .perceived_sample import (
     UNANSWERABLE_ANSWERS,
@@ -36,10 +41,38 @@ _TYPE_MAP = {
 
 
 def _map_qtype(raw: str) -> QuestionType:
+    """
+    Translate raw dataset category strings to internal QuestionType.
+
+    Parameters
+    ----------
+    raw : str
+        The raw label from the dataset.
+
+    Returns
+    -------
+    QuestionType
+        The corresponding internal category.
+    """
     return _TYPE_MAP.get(raw.strip().lower(), QuestionType.STANDARD)
 
 
 def _normalize_answer(answer: str, qtype: QuestionType) -> str:
+    """
+    Clean and standardize answer strings.
+
+    Parameters
+    ----------
+    answer : str
+        The raw answer from the dataset.
+    qtype : QuestionType
+        The category of the question.
+
+    Returns
+    -------
+    str
+        The normalized answer, using 'UNANSWERABLE' if appropriate.
+    """
     if qtype == QuestionType.UNANSWERABLE:
         return UNANSWERABLE_TOKEN
     if answer.strip().lower() in UNANSWERABLE_ANSWERS:
@@ -48,12 +81,27 @@ def _normalize_answer(answer: str, qtype: QuestionType) -> str:
 
 
 def _save_image(image, idx: int, img_dir: Path) -> str:
+    """
+    Export a PIL Image or binary image data to a local file.
+
+    Parameters
+    ----------
+    image : PIL.Image, bytes, or dict
+        The image data source.
+    idx : int
+        The sequential index for the filename.
+    img_dir : Path
+        The destination folder.
+
+    Returns
+    -------
+    str
+        The absolute filesystem path to the saved PNG.
+    """
     path = img_dir / f"chart_{idx:06d}.png"
     if path.exists():
         return str(path)
     try:
-        from PIL import Image as PILImage
-
         if isinstance(image, PILImage.Image):
             image.save(str(path))
         elif isinstance(image, bytes):
@@ -66,14 +114,10 @@ def _save_image(image, idx: int, img_dir: Path) -> str:
                 with open(str(path), "wb") as f:
                     f.write(raw)
             elif isinstance(raw, str) and raw:
-                import shutil
-
                 shutil.copy(raw, str(path))
             else:
                 raise ValueError(f"Unknown image dict keys: {list(image.keys())}")
         else:
-            import numpy as np
-
             PILImage.fromarray(np.array(image)).save(str(path))
         return str(path)
     except Exception as e:
@@ -82,7 +126,21 @@ def _save_image(image, idx: int, img_dir: Path) -> str:
 
 
 def _extract_mcq_choices(question: str) -> Optional[List[str]]:
-    """Try to extract A/B/C/D choices embedded in the question text."""
+    """
+    Parse multiple-choice options from within a natural language prompt.
+
+    Searches specifically for labels like 'A)', 'B:', or 'C '.
+
+    Parameters
+    ----------
+    question : str
+        The question text.
+
+    Returns
+    -------
+    list of str, optional
+        The extracted choice labels, if found.
+    """
     choices = re.findall(r"(?:^|(?<=\s))([A-D])[).:\s]+([^A-D\n]{3,})", question)
     if choices:
         return [c[1].strip() for c in choices]
@@ -90,6 +148,25 @@ def _extract_mcq_choices(question: str) -> Optional[List[str]]:
 
 
 def _normalize_row(row_idx: int, row: dict, img_dir: Path) -> List[PerceivedSample]:
+    """
+    Construct standardized sample objects from a raw dataset row.
+
+    Handles conversational turns by creating multiple samples if necessary.
+
+    Parameters
+    ----------
+    row_idx : int
+        The row index from the source.
+    row : dict
+        The raw dictionary results from HuggingFace.
+    img_dir : Path
+        Folder for saving images.
+
+    Returns
+    -------
+    list of PerceivedSample
+        The transformed samples.
+    """
     questions = row.get("Question") or []
     answers = row.get("Answer") or []
     qtype_raw = row.get("Question Type") or "Factoid"
@@ -123,11 +200,7 @@ def _normalize_row(row_idx: int, row: dict, img_dir: Path) -> List[PerceivedSamp
                 if pi + 1 < len(prev_turns):
                     context.append({"role": "assistant", "content": prev_turns[pi + 1]})
 
-        sample_id = (
-            f"chartqapro_{row_idx:06d}"
-            if len(questions) == 1
-            else f"chartqapro_{row_idx:06d}_t{turn_idx}"
-        )
+        sample_id = f"chartqapro_{row_idx:06d}" if len(questions) == 1 else f"chartqapro_{row_idx:06d}_t{turn_idx}"
 
         return PerceivedSample(
             sample_id=sample_id,
@@ -175,9 +248,27 @@ def load_chartqapro(
     cache_dir: Optional[str] = None,
     hf_token: Optional[str] = None,
 ) -> List[PerceivedSample]:
-    """Load ChartQAPro and return a list of PerceivedSample."""
-    from datasets import load_dataset
+    """
+    High-level loader for the ChartQAPro dataset.
 
+    Parameters
+    ----------
+    split : str, default 'test'
+        The split to load.
+    n : int, optional
+        Maximum number of samples to return.
+    image_dir : str, optional
+        Where to save the extracted images.
+    cache_dir : str, optional
+        HuggingFace cache location.
+    hf_token : str, optional
+        API token for private data.
+
+    Returns
+    -------
+    list of PerceivedSample
+        The ready-to-use data records.
+    """
     if image_dir is None:
         image_dir = "data/chartqapro_images"
     img_dir = Path(image_dir)

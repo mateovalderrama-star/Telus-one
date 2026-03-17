@@ -7,31 +7,28 @@ via `tool.pop_traces()` after the Crew finishes.
 
 import base64
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional, Type
 
 from crewai.tools import BaseTool
+from google import genai
+from openai import OpenAI
 from pydantic import BaseModel, Field, PrivateAttr
+
+from ..opik_integration.tracing import close_span, open_llm_span
 
 
 class VisionQAInput(BaseModel):
     """Input schema for VisionQATool."""
 
-    image_path: str = Field(
-        description="Absolute or relative path to the chart image file"
-    )
+    image_path: str = Field(description="Absolute or relative path to the chart image file")
     question: str = Field(description="The question to answer about the chart")
-    plan_steps: List[str] = Field(
-        description="Ordered inspection steps from the planner"
-    )
-    choices: Optional[List[str]] = Field(
-        default=None, description="MCQ answer choices if applicable"
-    )
-    context: Optional[List[dict]] = Field(
-        default=None, description="Prior conversation turns"
-    )
+    plan_steps: List[str] = Field(description="Ordered inspection steps from the planner")
+    choices: Optional[List[str]] = Field(default=None, description="MCQ answer choices if applicable")
+    context: Optional[List[dict]] = Field(default=None, description="Prior conversation turns")
 
 
 class VisionQATool(BaseTool):
@@ -55,7 +52,14 @@ class VisionQATool(BaseTool):
     _traces: list = PrivateAttr(default_factory=list)
 
     def pop_traces(self) -> list:
-        """Return collected traces and clear the buffer."""
+        """
+        Retrieve and clear the accumulated execution traces.
+
+        Returns
+        -------
+        list
+            A list of dictionary traces documenting each tool call.
+        """
         traces = list(self._traces)
         self._traces.clear()
         return traces
@@ -72,12 +76,27 @@ class VisionQATool(BaseTool):
         choices: Optional[List[str]] = None,
         context: Optional[List[dict]] = None,
     ) -> str:
-        """Run the vision QA tool with the given inputs.
-
-        Handles tracing and error capture.
         """
-        from ..opik_integration.tracing import close_span, open_llm_span
+        Execute the primary VLM analysis logic.
 
+        Parameters
+        ----------
+        image_path : str
+            The filesystem path to the chart image.
+        question : str
+            The textual query.
+        plan_steps : list of str
+            The inspection sequence to follow.
+        choices : list of str, optional
+            A list of MCQ candidates.
+        context : list of dict, optional
+            Prior conversational history.
+
+        Returns
+        -------
+        str
+            A JSON string containing the 'answer' and 'explanation'.
+        """
         start_ts = datetime.now(timezone.utc).isoformat()
         t0 = time.time()
 
@@ -97,19 +116,13 @@ class VisionQATool(BaseTool):
         error_str: Optional[str] = None
         try:
             if self.backend == "openai":
-                raw_text, provider_meta = self._call_openai(
-                    image_path, question, plan_steps, choices, context
-                )
+                raw_text, provider_meta = self._call_openai(image_path, question, plan_steps, choices, context)
             elif self.backend == "gemini":
-                raw_text, provider_meta = self._call_gemini(
-                    image_path, question, plan_steps, choices, context
-                )
+                raw_text, provider_meta = self._call_gemini(image_path, question, plan_steps, choices, context)
             else:
                 raise ValueError(f"Unknown backend: {self.backend!r}")
         except Exception as exc:
-            raw_text = json.dumps(
-                {"answer": "ERROR", "explanation": f"Tool error: {exc}"}
-            )
+            raw_text = json.dumps({"answer": "ERROR", "explanation": f"Tool error: {exc}"})
             provider_meta = {"error": str(exc)}
             error_str = str(exc)
 
@@ -151,9 +164,24 @@ class VisionQATool(BaseTool):
         choices: Optional[List[str]],
         context: Optional[List[dict]],
     ) -> str:
-        """Construct a VLM prompt.
+        """
+        Assemble the final prompt from various input components.
 
-        Uses the question, plan steps, choices, and context.
+        Parameters
+        ----------
+        question : str
+            The question text.
+        plan_steps : list of str
+            The procedure steps.
+        choices : list of str, optional
+            The MCQ options.
+        context : list of dict, optional
+            Prior messages.
+
+        Returns
+        -------
+        str
+            The concatenated prompt string.
         """
         parts: list = []
 
@@ -186,7 +214,21 @@ class VisionQATool(BaseTool):
     # ------------------------------------------------------------------
 
     def _encode_image(self, image_path: str) -> tuple:
-        """Encode an image as base64 and determine its MIME type."""
+        """
+        Load an image and convert it to a base64 encoded string.
+
+        Parameters
+        ----------
+        image_path : str
+            Filepath of the image.
+
+        Returns
+        -------
+        b64 : str
+            The encoded image data.
+        mime : str
+            The MIME type (e.g., 'image/png').
+        """
         ext = Path(image_path).suffix.lower().lstrip(".")
         mime = {
             "jpg": "jpeg",
@@ -207,11 +249,29 @@ class VisionQATool(BaseTool):
         choices: Optional[List[str]],
         context: Optional[List[dict]],
     ) -> tuple:
-        """Call the OpenAI vision API and return raw text and provider metadata."""
-        import os
+        """
+        Interface with the OpenAI Chat Completion API for vision analysis.
 
-        from openai import OpenAI
+        Parameters
+        ----------
+        image_path : str
+            The image path.
+        question : str
+            The question.
+        plan_steps : list of str
+            The plan.
+        choices : list of str, optional
+            The choices.
+        context : list of dict, optional
+            The context.
 
+        Returns
+        -------
+        raw_text : str
+            The text response from the model.
+        provider_meta : dict
+            Metadata including usage and request ID.
+        """
         client = OpenAI(api_key=self.api_key or os.environ.get("OPENAI_API_KEY", ""))
         prompt = self._build_prompt(question, plan_steps, choices, context)
         b64, mime = self._encode_image(image_path)
@@ -254,31 +314,41 @@ class VisionQATool(BaseTool):
         choices: Optional[List[str]],
         context: Optional[List[dict]],
     ) -> tuple:
-        """Call the Gemini vision API and return raw text and provider metadata."""
-        import os
+        """
+        Interface with the Google Generative AI API for vision analysis.
 
-        import google.generativeai as genai
-        from PIL import Image
+        Parameters
+        ----------
+        image_path : str
+            The image path.
+        question : str
+            The question.
+        plan_steps : list of str
+            The plan.
+        choices : list of str, optional
+            The choices.
+        context : list of dict, optional
+            The context.
 
-        genai.configure(api_key=self.api_key or os.environ.get("GEMINI_API_KEY", ""))
-        gemini_model = genai.GenerativeModel(self.model)
+        Returns
+        -------
+        raw_text : str
+            The text response from the model.
+        provider_meta : dict
+            Metadata including finish reason.
+        """
+        client = genai.Client(api_key=self.api_key or os.environ.get("GEMINI_API_KEY", ""))
         prompt = self._build_prompt(question, plan_steps, choices, context)
-        image = Image.open(image_path)
+        b64, mime = self._encode_image(image_path)
 
-        response = gemini_model.generate_content(
-            [image, prompt],
-            generation_config=genai.types.GenerationConfig(
-                temperature=0,
-                max_output_tokens=1024,
-            ),
+        response = client.models.generate_content(
+            model=self.model,
+            contents=[genai.types.Part.from_bytes(data=b64, mime_type=f"image/{mime}"), prompt],
+            config=genai.types.GenerateContentConfig(temperature=0, max_output_tokens=1024),
         )
 
         raw_text = response.text or ""
-        finish = (
-            str(response.candidates[0].finish_reason)
-            if response.candidates
-            else "unknown"
-        )
+        finish = str(response.candidates[0].finish_reason) if response.candidates else "unknown"
         provider_meta = {
             "model": self.model,
             "finish_reason": finish,

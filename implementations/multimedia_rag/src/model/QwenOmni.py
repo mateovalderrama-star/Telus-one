@@ -18,7 +18,13 @@ MODALITIES = {"text", "image", "video", "audio"}
 
 
 class Qwen2_5OMNI(BaseModel):  # noqa: N801
-    """Wrap the Qwen2.5-Omni model to handle multi-modal input and generate output."""
+    """
+    A specialized wrapper for the Qwen2.5-Omni multimodal model.
+
+    This class handles the complexity of managing conversational state,
+    preprocessing heterogeneous media types (images, videos, audio), and
+    interfacing with the transformer model for unified generation.
+    """
 
     def __init__(
         self,
@@ -28,7 +34,22 @@ class Qwen2_5OMNI(BaseModel):  # noqa: N801
         use_audio_in_video=True,
         return_audio=False,
     ):
-        """Initialize the model and processor."""
+        """
+        Initialize the Qwen2.5-Omni model wrapper.
+
+        Parameters
+        ----------
+        model_name : str, default 'Qwen/Qwen2.5-Omni-7B'
+            The Hugging Face repo ID or local path for the model.
+        prompt : str, optional
+            A system prompt to guide the model's behavior.
+        enable_flashattn : bool, default True
+            Whether to attempt using FlashAttention (overridden in implementation).
+        use_audio_in_video : bool, default True
+            If True, audio streams from video files are processed.
+        return_audio : bool, default False
+            If True, the model's audio output is returned along with text.
+        """
         self.prompt = prompt
         self.return_audio = return_audio
         self.use_audio_in_video = use_audio_in_video
@@ -52,12 +73,22 @@ class Qwen2_5OMNI(BaseModel):  # noqa: N801
         self.dtype = self.model.dtype
 
     def prepare_input(self, inputs):
-        """Prepare model input from multi-modal data.
+        """
+        Transform raw interaction data into tensors for the Omni model.
 
-        Processes text, audio, image, and video inputs and converts them into
-        the format required by the Qwen2.5-Omni model. Creates conversation
-        structure with system and user roles, applies chat template, and
-        handles multi-modal preprocessing.
+        Organizes text and media into a standardized conversation format,
+        applies the required chat template, and uses the processor to create
+        PyTorch tensors.
+
+        Parameters
+        ----------
+        inputs : list of dict
+            A list of dictionary inputs containing multimedia content.
+
+        Returns
+        -------
+        dict
+            A dictionary of model-ready tensors moved to the correct device.
         """
         conversation = []
 
@@ -96,13 +127,9 @@ class Qwen2_5OMNI(BaseModel):  # noqa: N801
         if len(conversation) == 1:
             conversation = conversation[0]
 
-        text = self.processor.apply_chat_template(
-            conversation, add_generation_prompt=True, tokenize=False
-        )
+        text = self.processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
 
-        audios, images, videos = process_mm_info(
-            conversation, use_audio_in_video=self.use_audio_in_video
-        )
+        audios, images, videos = process_mm_info(conversation, use_audio_in_video=self.use_audio_in_video)
 
         inputs = self.processor(
             text=text,
@@ -118,7 +145,24 @@ class Qwen2_5OMNI(BaseModel):  # noqa: N801
 
     @torch.no_grad()
     def generate(self, inputs):
-        """Generate text and audio response from the model given prepared inputs."""
+        """
+        Perform inference and return the decoded assistant response.
+
+        Processes the model's output IDs to extract text and optionally audio
+        waveforms. Timestamps in the response are normalized for consistency.
+
+        Parameters
+        ----------
+        inputs : dict
+            The output of `prepare_input`.
+
+        Returns
+        -------
+        text : list of str
+            The generated text responses for each input sample.
+        audio : np.ndarray or None
+            The generated audio bytes if `return_audio` was enabled.
+        """
 
         def normalize_timestamp(text):
             pattern = r"\[(.*?)\]"
@@ -143,9 +187,7 @@ class Qwen2_5OMNI(BaseModel):  # noqa: N801
                 max_new_tokens=128,
                 do_sample=False,
             )
-            text = self.processor.batch_decode(
-                text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )
+            text = self.processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             audio = audio.reshape(-1).detach().cpu().numpy()  # need to change
         else:
             text_ids = self.model.generate(
@@ -155,9 +197,7 @@ class Qwen2_5OMNI(BaseModel):  # noqa: N801
                 max_new_tokens=128,  # speed boost
                 do_sample=False,  # deterministic & faster
             )
-            text = self.processor.batch_decode(
-                text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )
+            text = self.processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             audio = None
         text = [normalize_timestamp(t.split("assistant")[-1].strip()) for t in text]
         return text, audio

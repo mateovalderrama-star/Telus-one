@@ -5,7 +5,7 @@ chart image AND the agent's wrong answer so it can make a grounded, visual
 diagnosis of the failure mode.
 
 Usage:
-    python -m agentic_chartqapro_eval.eval.error_taxonomy \\
+    uv run --env-file .env -m agentic_chartqapro_eval.eval.error_taxonomy \\
         --mep_dir meps/openai_openai/chartqapro/test \\
         --metrics_file metrics.jsonl \\
         --out taxonomy.jsonl
@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+from google import genai
+from openai import OpenAI
 
 from ..mep.writer import iter_meps
 from ..opik_integration.client import get_client
@@ -92,11 +94,7 @@ def _encode_image(image_path: str) -> tuple:
     return b64, mime
 
 
-def _call_vlm_openai(
-    prompt: str, image_path: str, model: str, api_key: Optional[str]
-) -> str:
-    from openai import OpenAI
-
+def _call_vlm_openai(prompt: str, image_path: str, model: str, api_key: Optional[str]) -> str:
     client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY", ""))
     b64, mime = _encode_image(image_path)
     response = client.chat.completions.create(
@@ -119,20 +117,13 @@ def _call_vlm_openai(
     return response.choices[0].message.content or ""
 
 
-def _call_vlm_gemini(
-    prompt: str, image_path: str, model: str, api_key: Optional[str]
-) -> str:
-    import google.generativeai as genai
-    from PIL import Image
-
-    genai.configure(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
-    gemini_model = genai.GenerativeModel(model)
-    image = Image.open(image_path)
-    response = gemini_model.generate_content(
-        [image, prompt],
-        generation_config=genai.types.GenerationConfig(
-            temperature=0, max_output_tokens=256
-        ),
+def _call_vlm_gemini(prompt: str, image_path: str, model: str, api_key: Optional[str]) -> str:
+    client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
+    b64, mime = _encode_image(image_path)
+    response = client.models.generate_content(
+        model=model,
+        contents=[genai.types.Part.from_bytes(data=b64, mime_type=f"image/{mime}"), prompt],
+        config=genai.types.GenerateContentConfig(temperature=0, max_output_tokens=256),
     )
     return response.text or ""
 
@@ -170,9 +161,7 @@ def classify_failure(
     explanation = vision.get("explanation", "")
     image_path = sample.get("image_ref", {}).get("path", "") or ""
     plan_steps = plan.get("steps", [])
-    steps_text = (
-        "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(plan_steps)) or "  (none)"
-    )
+    steps_text = "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(plan_steps)) or "  (none)"
 
     prompt = _TAXONOMY_PROMPT.format(
         question=question or "(unknown)",
@@ -195,8 +184,6 @@ def classify_failure(
                 raise ValueError(f"Unknown backend: {backend!r}")
         # Image missing — use text-only fallback via the same models
         elif backend == "openai":
-            from openai import OpenAI
-
             client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY", ""))
             resp = client.chat.completions.create(
                 model=model,
@@ -211,14 +198,13 @@ def classify_failure(
             )
             raw = resp.choices[0].message.content or ""
         elif backend == "gemini":
-            import google.generativeai as genai
-
-            genai.configure(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
-            m = genai.GenerativeModel(model)
-            raw = (
-                m.generate_content(prompt + "\n\n(Note: chart image unavailable)").text
-                or ""
+            client = genai.Client(api_key=api_key or os.environ.get("GEMINI_API_KEY", ""))
+            resp = client.models.generate_content(
+                model=model,
+                contents=[prompt + "\n\n(Note: chart image unavailable)"],
+                config=genai.types.GenerateContentConfig(temperature=0, max_output_tokens=256),
             )
+            raw = resp.text or ""
         else:
             raise ValueError(f"Unknown backend: {backend!r}")
 
@@ -249,9 +235,7 @@ def classify_failure(
 def main() -> None:  # noqa: PLR0915
     """Classify failures in MEP files and write taxonomy results to JSONL."""
     parser = argparse.ArgumentParser(description="Pass 4: failure taxonomy via VLM")
-    parser.add_argument(
-        "--mep_dir", required=True, help="Directory containing MEP JSON files"
-    )
+    parser.add_argument("--mep_dir", required=True, help="Directory containing MEP JSON files")
     parser.add_argument(
         "--metrics_file",
         default=None,
@@ -276,9 +260,7 @@ def main() -> None:  # noqa: PLR0915
                 line = raw_line.strip()
                 if line:
                     row = json.loads(line)
-                    accuracy_by_id[row.get("sample_id", "")] = row.get(
-                        "answer_accuracy", 0.0
-                    )
+                    accuracy_by_id[row.get("sample_id", "")] = row.get("answer_accuracy", 0.0)
 
     opik_client = get_client()
 
@@ -297,11 +279,7 @@ def main() -> None:  # noqa: PLR0915
             answer_accuracy = accuracy_by_id.get(sample_id, -1.0)
             if answer_accuracy < 0:
                 # fallback: 1.0 if strings match case-insensitively
-                answer_accuracy = (
-                    1.0
-                    if expected.strip().lower() == predicted.strip().lower()
-                    else 0.0
-                )
+                answer_accuracy = 1.0 if expected.strip().lower() == predicted.strip().lower() else 0.0
 
             if answer_accuracy >= 1.0 and not args.classify_all:
                 skipped += 1
@@ -320,9 +298,7 @@ def main() -> None:  # noqa: PLR0915
                 continue
 
             try:
-                result = classify_failure(
-                    mep, answer_accuracy, backend=args.backend, model=args.model
-                )
+                result = classify_failure(mep, answer_accuracy, backend=args.backend, model=args.model)
                 row = {
                     "sample_id": sample_id,
                     "config_name": config_name,
@@ -356,9 +332,7 @@ def main() -> None:  # noqa: PLR0915
             except Exception as exc:
                 print(f"  Error on {sample_id}: {exc}")
 
-    print(
-        f"\nDone. {count} rows written to {args.out}  ({skipped} correct samples recorded as-is)"
-    )
+    print(f"\nDone. {count} rows written to {args.out}  ({skipped} correct samples recorded as-is)")
 
     # Print a quick breakdown
     breakdown: dict = {}

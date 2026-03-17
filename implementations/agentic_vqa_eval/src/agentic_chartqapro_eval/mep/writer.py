@@ -17,6 +17,7 @@ def write_mep(mep: MEP, out_dir: str) -> str:
 
 
 def read_mep(path: str) -> dict:
+    """Read a MEP JSON file from disk and return its content as a dict."""
     with open(path) as f:
         return json.load(f)
 

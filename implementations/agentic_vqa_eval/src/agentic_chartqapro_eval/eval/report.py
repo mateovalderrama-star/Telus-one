@@ -4,7 +4,7 @@ Reads metrics.jsonl (required) plus taxonomy.jsonl (optional) and writes a
 single portable HTML file — no external dependencies, no JavaScript required.
 
 Usage:
-    python -m agentic_chartqapro_eval.eval.report \\
+    uv run --env-file .env -m agentic_chartqapro_eval.eval.report \\
         --metrics metrics.jsonl \\
         --taxonomy taxonomy.jsonl \\
         --out report.html
@@ -161,11 +161,7 @@ def _summary_cards(rows: list, taxonomy: list) -> str:
     revised = sum(1 for r in rows if r.get("verifier_verdict") == "revised")
     has_ver = any(r.get("verifier_verdict") not in (None, "skipped") for r in rows)
 
-    judge_vals = [
-        r.get("judge_explanation_quality", 0.0)
-        for r in rows
-        if "judge_explanation_quality" in r
-    ]
+    judge_vals = [r.get("judge_explanation_quality", 0.0) for r in rows if "judge_explanation_quality" in r]
     avg_judge = sum(judge_vals) / len(judge_vals) if judge_vals else None
 
     cards = [
@@ -174,9 +170,7 @@ def _summary_cards(rows: list, taxonomy: list) -> str:
         ("Avg Latency", f"{avg_lat:.1f}s", "planner + vision + verifier"),
     ]
     if has_ver:
-        cards.append(
-            ("Verifier Revised", str(revised), f"{revised / n:.1%} of samples")
-        )
+        cards.append(("Verifier Revised", str(revised), f"{revised / n:.1%} of samples"))
     if avg_judge is not None:
         cards.append(("Judge Quality", f"{avg_judge:.2f}", "explanation_quality"))
     if taxonomy:
@@ -200,9 +194,7 @@ def _accuracy_by_qtype(rows: list) -> str:
     """Build HTML table of average accuracy and distribution by question type."""
     by_type: dict = defaultdict(list)
     for r in rows:
-        by_type[r.get("question_type", "standard")].append(
-            r.get("answer_accuracy", 0.0)
-        )
+        by_type[r.get("question_type", "standard")].append(r.get("answer_accuracy", 0.0))
 
     html = '<div class="table-wrap"><table>'
     html += "<tr><th>Question Type</th><th>Samples</th><th>Avg Accuracy</th><th>Distribution</th></tr>"
@@ -246,16 +238,8 @@ def _verifier_stats(rows: list) -> Optional[str]:
         )
 
     # Accuracy comparison: revised vs confirmed
-    revised_acc = [
-        r.get("answer_accuracy", 0)
-        for r in rows
-        if r.get("verifier_verdict") == "revised"
-    ]
-    confirmed_acc = [
-        r.get("answer_accuracy", 0)
-        for r in rows
-        if r.get("verifier_verdict") == "confirmed"
-    ]
+    revised_acc = [r.get("answer_accuracy", 0) for r in rows if r.get("verifier_verdict") == "revised"]
+    confirmed_acc = [r.get("answer_accuracy", 0) for r in rows if r.get("verifier_verdict") == "confirmed"]
     if revised_acc and confirmed_acc:
         avg_rev = sum(revised_acc) / len(revised_acc)
         avg_conf = sum(confirmed_acc) / len(confirmed_acc)
@@ -378,7 +362,9 @@ def _sample_table(rows: list, taxonomy_by_id: dict, max_rows: int = 100) -> str:
             row += f"<td>{_failure_badge(ft) if ft != '—' else '—'}</td>"
         if has_judge:
             jq = r.get("judge_explanation_quality")
-            row += f'<td class="{_acc_class(jq) if jq is not None else ""}">{f"{jq:.2f}" if jq is not None else "—"}</td>'
+            row += (
+                f'<td class="{_acc_class(jq) if jq is not None else ""}">{f"{jq:.2f}" if jq is not None else "—"}</td>'
+            )
 
         out += f"<tr>{row}</tr>"
 
@@ -405,9 +391,7 @@ def build_report(
     stats, judge scores, failure taxonomy, and a per-sample results table.
     Writes the result to out_path with embedded CSS (no external deps).
     """
-    config = (
-        metrics_rows[0].get("config_name", "unknown") if metrics_rows else "unknown"
-    )
+    config = metrics_rows[0].get("config_name", "unknown") if metrics_rows else "unknown"
     taxonomy_by_id = {t["sample_id"]: t for t in taxonomy_rows if "sample_id" in t}
 
     sections: list[str] = []
@@ -438,9 +422,7 @@ def build_report(
         sections.append(_taxonomy_breakdown(taxonomy_rows))
 
     # 6. Per-sample table
-    sections.append(
-        f"<h2>Per-Sample Results (first {min(len(metrics_rows), 100)})</h2>"
-    )
+    sections.append(f"<h2>Per-Sample Results (first {min(len(metrics_rows), 100)})</h2>")
     sections.append(_sample_table(metrics_rows, taxonomy_by_id))
 
     body = "\n".join(sections)
@@ -464,12 +446,8 @@ def build_report(
 
 def main() -> None:
     """Parse CLI arguments and generate the HTML evaluation report."""
-    parser = argparse.ArgumentParser(
-        description="Generate a self-contained HTML evaluation report"
-    )
-    parser.add_argument(
-        "--metrics", required=True, help="metrics.jsonl from eval_outputs.py"
-    )
+    parser = argparse.ArgumentParser(description="Generate a self-contained HTML evaluation report")
+    parser.add_argument("--metrics", required=True, help="metrics.jsonl from eval_outputs.py")
     parser.add_argument(
         "--taxonomy",
         default=None,

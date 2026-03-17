@@ -66,12 +66,21 @@ PROMPT_V2 = """
 
 def build_judge_prompt(entry, retrieval_scores=None, version="v0"):
     """
-    Build a prompt for the LLM judge.
+    Create a detailed prompt for the LLM judge to evaluate candidate answers.
 
-    Args:
-        entry (dict): One question entry from inference output.
-        retrieval_scores (dict, optional):
-            {segment_id: score}
+    Parameters
+    ----------
+    entry : dict
+        A dictionary containing question data, choices, and agent responses.
+    retrieval_scores : dict, optional
+        Mapping of segment IDs to their retrieval scores, used for prioritization.
+    version : str, default 'v0'
+        The version of the prompt template to use ('v0', 'v1', or 'v2').
+
+    Returns
+    -------
+    str
+        The fully rendered prompt string.
     """
     question = entry["question"]
     options = entry["options"]
@@ -113,7 +122,28 @@ def build_judge_prompt(entry, retrieval_scores=None, version="v0"):
 
 
 def run_meta_judge(model, entry, retrieval_scores=None, version="v2"):
-    """Run LLM-as-judge aggregation."""
+    """
+    Execute the LLM-as-a-judge process to aggregate multiple segment answers.
+
+    This function builds a prompt, sends it to the provided model, and parses
+    the model's response to extract the selected answer letter (A-E).
+
+    Parameters
+    ----------
+    model : Any
+        The LLM model object capable of text generation.
+    entry : dict
+        Data for a single question including segments and their raw answers.
+    retrieval_scores : dict, optional
+        Retrieval scores for the segments in the entry.
+    version : str, default 'v2'
+        The version of the judge prompt to use.
+
+    Returns
+    -------
+    str
+        The chosen answer option as a single letter.
+    """
     judge_prompt = build_judge_prompt(entry, retrieval_scores, version=version)
 
     # Use wrapper-style input
@@ -134,7 +164,27 @@ def run_meta_judge(model, entry, retrieval_scores=None, version="v2"):
 
 
 def run_meta_aggregation(input_path, output_path, model, version="v2"):
-    """Run LLM-as-judge aggregation on an existing inference JSON file."""
+    """
+    Update an entire inference result file with meta-judge predictions.
+
+    Reads a JSON file containing model outputs for multiple questions, applies
+    the meta-judge aggregation to each, and saves the results to a new file.
+
+    Parameters
+    ----------
+    input_path : str
+        Path to the source JSON file with inference results.
+    output_path : str
+        Path where the updated JSON file should be saved.
+    model : Any
+        The LLM model to use for the aggregation.
+    version : str, default 'v2'
+        The judge prompt version.
+
+    Returns
+    -------
+    None
+    """
     with open(input_path, "r") as f:
         data = json.load(f)
 
@@ -144,9 +194,7 @@ def run_meta_aggregation(input_path, output_path, model, version="v2"):
         # Build retrieval score mapping if available
         retrieval_scores = {}
         if "retrieval_scores" in entry:
-            retrieval_scores = dict(
-                zip(entry["retrieved_file"], entry["retrieval_scores"])
-            )
+            retrieval_scores = dict(zip(entry["retrieved_file"], entry["retrieval_scores"]))
 
         # Guard: all unanswerable
         all_unanswerable = True
@@ -156,10 +204,7 @@ def run_meta_aggregation(input_path, output_path, model, version="v2"):
                     all_unanswerable = False
                     break
 
-        if all_unanswerable:
-            final_answer = "E"
-        else:
-            final_answer = run_meta_judge(model, entry, retrieval_scores, version=version)
+        final_answer = "E" if all_unanswerable else run_meta_judge(model, entry, retrieval_scores, version=version)
 
         entry["meta_answer_letter"] = final_answer
 
@@ -174,19 +219,38 @@ def run_meta_aggregation(input_path, output_path, model, version="v2"):
 
 
 def extract_video_number(segment_id):
-    """Extract the video number from a segment ID string."""
+    """
+    Extract the source video identifier from a segment name.
+
+    Parameters
+    ----------
+    segment_id : str
+        The unique ID string for a video segment.
+
+    Returns
+    -------
+    str
+        The extracted video number.
+    """
     parts = segment_id.split("__")
     return parts[-2]  # second-to-last element is video number
 
 
 def evaluate_diagnostics(path):
     """
-    Evaluate retrieval and meta-aggregation performance.
+    Calculate and display performance metrics for the complete pipeline.
 
-    Metrics:
-    - Top-1 Retrieval: % of questions where top retrieved segment is correct.
-    - Recall@6: % of questions where any of the 6 retrieved segments is correct.
-    - Meta Accuracy: % of questions where meta-aggregated answer is correct.
+    Computes retrieval metrics (Top-1 and Recall@6) alongside the final
+    meta-aggregation accuracy by comparing results against ground truth.
+
+    Parameters
+    ----------
+    path : str
+        Path to the JSON file containing the meta-aggregated results.
+
+    Returns
+    -------
+    None
     """
     with open(path) as f:
         data = json.load(f)

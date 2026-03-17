@@ -16,7 +16,7 @@ Two isolated environments are required due to incompatible Torch stacks.
 
 ---
 
-# Project Structure
+## Project Structure
 
 ```text
 video_rag/
@@ -30,7 +30,7 @@ video_rag/
 
 ---
 
-# 1. Download Model Checkpoint
+## 1. Download Model Checkpoint
 
 ```bash
 mkdir -p checkpoints
@@ -43,15 +43,15 @@ This is required for embedding video/audio segments.
 
 ---
 
-# 2. Download Dataset
+## 2. Download Dataset
 
-## Create data directory
+### Create data directory
 
 ```bash
 mkdir -p data
 ```
 
-## VQA JSON Files (Place in `data/`)
+### VQA JSON Files (Place in `data/`)
 
 Download:
 
@@ -61,7 +61,7 @@ Download:
 
 These define the multiple-choice video QA tasks.
 
-## Video / Audio / Caption Files
+### Video / Audio / Caption Files
 
 Download from:
 
@@ -71,7 +71,7 @@ Download from:
 
 Extract contents into:
 
-```
+```bash
 data/
 ```
 
@@ -83,7 +83,7 @@ The expected structure includes:
 
 ---
 
-# 3. Environment Setup
+## 3. Environment Setup
 
 Two independent environments are required due to package conflicts between the RAG (retrieval) and QA (inference) pipelines. Follow the instructions below to set up each environment.
 
@@ -99,14 +99,14 @@ sudo apt install ffmpeg
 
 Used for:
 
-- Segment embedding
-- Cross-modal similarity search
-- Top-k retrieval
+* Segment embedding
+* Cross-modal similarity search
+* Top-k retrieval
 
 From the **root of the repository**:
 
 ```bash
-uv sync --group ref5-multimedia-rag-vlm
+uv sync --group multimedia-rag
 source .venv/bin/activate
 ```
 
@@ -116,13 +116,13 @@ source .venv/bin/activate
 
 Used for:
 
-- Qwen Omni multimodal reasoning
-- Answer generation over retrieved segments
+* Qwen Omni multimodal reasoning
+* Answer generation over retrieved segments
 
 From the **root of the repository**:
 
 ```bash
-uv sync --group ref5-multimedia-rag-vlm-qa
+uv sync --group multimedia-rag
 source .venv/bin/activate
 ```
 
@@ -130,7 +130,7 @@ source .venv/bin/activate
 
 ---
 
-# 4. Running Notebooks
+## 4. Running Notebooks
 
 ```bash
 jupyter lab
@@ -143,7 +143,7 @@ Choose:
 
 ---
 
-# Implementation Overview
+## Implementation Overview
 
 ## Retrieval Pipeline
 
@@ -162,7 +162,7 @@ Choose:
 4. Generate MCQ answer
 5. Evaluate accuracy
 
-# References and Resources
+## References and Resources
 
 1. **[MAGNET: A Multi-agent Framework for Finding Audio-Visual Needles by Reasoning over Multi-Video Haystacks](https://arxiv.org/abs/2506.07016)**
     A comprehensive framework for temporal, causal, and multi-hop retrieval across long video haystacks.

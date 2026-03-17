@@ -1,7 +1,7 @@
 r"""Pass 1: output-based evaluation — rule-based accuracy + LLM judge rubric.
 
 Usage:
-    python -m agentic_chartqapro_eval.eval.eval_outputs \\
+    uv run --env-file .env -m agentic_chartqapro_eval.eval.eval_outputs \\
         --mep_dir meps/openai_gemini/chartqapro/test \\
         --out metrics.jsonl
 """
@@ -55,9 +55,10 @@ def score_answer_accuracy(expected: str, predicted: str, question_type: str) -> 
     # Numeric tolerance check (5% relative, 0.5 absolute for small values)
     exp_num = _to_number(exp)
     pred_num = _to_number(pred)
-    if exp_num is not None and pred_num is not None:
-        if math.isclose(exp_num, pred_num, rel_tol=0.001, abs_tol=0.5): # tighter tolerance for chart QA, can adjust as needed
-            return 1.0
+    if (
+        exp_num is not None and pred_num is not None and math.isclose(exp_num, pred_num, rel_tol=0.001, abs_tol=0.5)
+    ):  # tighter tolerance for chart QA, can adjust as needed
+        return 1.0
 
     # MCQ substring check
     if question_type == "mcq" and (exp in pred or pred in exp):
@@ -116,14 +117,11 @@ def evaluate_mep(
         "config_name": config.get("config_name", ""),
         "expected": expected,
         "predicted": predicted,
-        "vision_answer": vision_parsed.get(
-            "answer", ""
-        ),  # raw vision answer pre-verification
+        "vision_answer": vision_parsed.get("answer", ""),  # raw vision answer pre-verification
         "verifier_verdict": verifier_verdict,
         "planner_parse_ok": not plan.get("parse_error", True),
         "vision_parse_ok": not vision.get("parse_error", True),
-        "json_parse_ok": (not plan.get("parse_error", True))
-        and (not vision.get("parse_error", True)),
+        "json_parse_ok": (not plan.get("parse_error", True)) and (not vision.get("parse_error", True)),
         "answer_accuracy": score_answer_accuracy(expected, predicted, question_type),
         "latency_sec": (planner_ms + vision_ms + verifier_ms) / 1000.0,
         "tool_call_count": len(vision.get("tool_trace", [])),
@@ -147,17 +145,10 @@ def evaluate_mep(
             score_keys = ["answer_accuracy", "latency_sec"] + (
                 [f"judge_{k}" for k in judge_scores] if use_judge else []
             )
-            scores = {
-                k: metrics[k]
-                for k in score_keys
-                if isinstance(metrics.get(k), (int, float))
-            }
+            scores = {k: metrics[k] for k in score_keys if isinstance(metrics.get(k), (int, float))}
             with contextlib.suppress(Exception):
                 client.log_traces_feedback_scores(
-                    [
-                        {"id": opik_trace_id, "name": k, "value": float(v)}
-                        for k, v in scores.items()
-                    ]
+                    [{"id": opik_trace_id, "name": k, "value": float(v)} for k, v in scores.items()]
                 )
 
     return metrics
@@ -171,16 +162,10 @@ def evaluate_mep(
 def main() -> None:
     """Evaluate MEPs and write output-based metrics to JSONL."""
     parser = argparse.ArgumentParser(description="Evaluate MEPs — output-based metrics")
-    parser.add_argument(
-        "--mep_dir", required=True, help="Directory containing MEP JSON files"
-    )
+    parser.add_argument("--mep_dir", required=True, help="Directory containing MEP JSON files")
     parser.add_argument("--out", default="metrics.jsonl", help="Output JSONL file")
-    parser.add_argument(
-        "--no_judge", action="store_true", help="Skip LLM judge (faster)"
-    )
-    parser.add_argument(
-        "--judge_backend", default="gemini", choices=["openai", "gemini"]
-    )
+    parser.add_argument("--no_judge", action="store_true", help="Skip LLM judge (faster)")
+    parser.add_argument("--judge_backend", default="gemini", choices=["openai", "gemini"])
     parser.add_argument("--judge_model", default="gemini-2.5-flash-lite")
     args = parser.parse_args()
 

@@ -5,7 +5,7 @@ Usage:
     text = get_prompt("planner_prompt", PLANNER_PROMPT_PATH)
 
     # Push current prompt files to Opik (run once before a new experiment)
-    python -m agentic_chartqapro_eval.opik_integration.prompts
+    uv run --env-file .env -m agentic_chartqapro_eval.opik_integration.prompts
 """
 
 import argparse
@@ -65,9 +65,7 @@ def push_prompts(
 
 def main() -> None:
     """Parse CLI arguments and push prompt files to the Opik Prompt Library."""
-    parser = argparse.ArgumentParser(
-        description="Push prompt files to Opik Prompt Library"
-    )
+    parser = argparse.ArgumentParser(description="Push prompt files to Opik Prompt Library")
     parser.add_argument("--planner", default=None, help="Path to planner.txt")
     parser.add_argument("--vision", default=None, help="Path to vision.txt")
     args = parser.parse_args()

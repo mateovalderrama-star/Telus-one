@@ -12,10 +12,23 @@ def parse_strict(
     required_keys: Optional[list[str]] = None,
 ) -> tuple[dict[str, Any], bool]:
     """
-    Parse JSON from text. Returns (parsed_dict, parse_ok).
+    Parse JSON data from a string with automatic cleanup and repair.
 
-    parse_ok=True  → clean parse, no repair needed
-    parse_ok=False → either repair was needed or parse failed entirely
+    Handles markdown fences and extracts the first JSON block found.
+
+    Parameters
+    ----------
+    text : str
+        The raw string content to parse.
+    required_keys : list of str, optional
+        Keys that must be present in the resulting dictionary.
+
+    Returns
+    -------
+    result : dict
+        The parsed data, or an empty dict if parsing failed.
+    parse_ok : bool
+        True if the JSON was valid without needing structural repairs.
     """
     text = text.strip()
 
@@ -56,7 +69,21 @@ def parse_strict(
 
 
 def _check_keys(result: Any, required_keys: Optional[list[str]]) -> bool:
-    """Check if result is a dict and contains all required keys (if any)."""
+    """
+    Validate that the object is a dictionary containing specific keys.
+
+    Parameters
+    ----------
+    result : Any
+        The object to validate.
+    required_keys : list of str, optional
+        The minimal set of keys expected.
+
+    Returns
+    -------
+    bool
+        True if the object is a dict and all keys are present.
+    """
     if not isinstance(result, dict):
         return False
     return not required_keys or all(k in result for k in required_keys)
