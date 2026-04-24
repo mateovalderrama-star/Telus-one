@@ -73,17 +73,20 @@ class ProbeLibrary:
         for f in files:
             data = np.load(f, allow_pickle=False)
             concept = str(data["concept"])
-            probe = Probe(
-                concept=concept,
-                layer_idx=int(data["layer_idx"]),
-                direction=np.asarray(data["direction"], dtype=np.float32),
-                threshold=float(data["threshold"]),
-                calibration={
-                    "mu": float(data["calibration_mu"]),
-                    "sigma": float(data["calibration_sigma"]),
-                },
-                pool_method=str(data["pool_method"]),
-            )
+            try:
+                probe = Probe(
+                    concept=concept,
+                    layer_idx=int(data["layer_idx"]),
+                    direction=np.asarray(data["direction"], dtype=np.float32),
+                    threshold=float(data["threshold"]),
+                    calibration={
+                        "mu": float(data["calibration_mu"]),
+                        "sigma": float(data["calibration_sigma"]),
+                    },
+                    pool_method=str(data["pool_method"]),
+                )
+            except (TypeError, ValueError) as exc:
+                raise ProbeLibraryError(f"Invalid probe data in {f.name}: {exc}") from exc
             if concept in probes:
                 raise ProbeLibraryError(f"duplicate concept: {concept}")
             probes[concept] = probe
