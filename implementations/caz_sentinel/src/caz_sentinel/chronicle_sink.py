@@ -62,16 +62,16 @@ class NoopSink:
 
 class ChronicleSink:
     def __init__(
-        self, *, transport: Callable[[dict], Awaitable[None]] | None = None,
+        self, *, transport: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
         endpoint: str | None = None, max_queue: int = 1000,
     ) -> None:
-        self._queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=max_queue)
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max_queue)
         self._task: asyncio.Task | None = None
         self._endpoint = endpoint
         self._transport = transport or self._http_transport
         self._client: httpx.AsyncClient | None = None
 
-    async def _http_transport(self, event: dict) -> None:
+    async def _http_transport(self, event: dict[str, Any]) -> None:
         assert self._endpoint is not None
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=5.0)
@@ -80,13 +80,16 @@ class ChronicleSink:
             log.warning("chronicle emit failed: %s %s", r.status_code, r.text[:200])
 
     async def start(self) -> None:
-        self._task = asyncio.create_task(self._worker())
+        if self._task is None:
+            self._task = asyncio.create_task(self._worker())
 
     async def _worker(self) -> None:
         while True:
             event = await self._queue.get()
             try:
                 await self._transport(event)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 log.exception("chronicle transport error (dropped)")
             finally:
