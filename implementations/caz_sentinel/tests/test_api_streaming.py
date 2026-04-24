@@ -1,4 +1,7 @@
-"""Streaming tests for CAZ Sentinel API."""
+"""Integration tests for SSE streaming endpoints."""
+from __future__ import annotations
+
+import json
 import pytest
 
 
@@ -10,8 +13,10 @@ def test_streaming_suppressed_emits_done(client_suppress):
         "stream": True,
     }) as r:
         chunks = [line for line in r.iter_lines() if line]
-    assert any("content_filter" in c for c in chunks)
     assert chunks[-1] == "data: [DONE]"
+    data_chunks = [json.loads(c[len("data: "):]) for c in chunks[:-1]]
+    assert all(c["object"] == "chat.completion.chunk" for c in data_chunks)
+    assert any(c["choices"][0].get("finish_reason") == "content_filter" for c in data_chunks)
 
 
 @pytest.mark.integration_test
@@ -24,3 +29,7 @@ def test_streaming_pass_emits_done(client):
     }) as r:
         chunks = [line for line in r.iter_lines() if line]
     assert chunks[-1] == "data: [DONE]"
+    data_chunks = [json.loads(c[len("data: "):]) for c in chunks[:-1]]
+    assert all(c["object"] == "chat.completion.chunk" for c in data_chunks)
+    assert data_chunks[0]["choices"][0]["delta"].get("role") == "assistant"
+    assert data_chunks[-1]["choices"][0].get("finish_reason") == "stop"

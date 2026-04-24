@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import os
+import threading
 from typing import Any
 import torch
+from transformers import TextIteratorStreamer
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -81,12 +83,10 @@ def build_app() -> FastAPI:
         if req.stream:
             if audit_result.decision == Decision.SUPPRESSED:
                 return StreamingResponse(
-                    iter(list(suppressed_stream(req.model, refusal))),
+                    suppressed_stream(req.model, refusal),
                     media_type="text/event-stream",
                 )
             # Pass + stream: iterate token-by-token via TextIteratorStreamer.
-            from transformers import TextIteratorStreamer
-            import threading
             streamer = TextIteratorStreamer(tok, skip_prompt=True, skip_special_tokens=True)
             input_ids = prompt_inputs.input_ids.to(device)
             # Note: streaming doesn't use cache_position, so we must not use past_kv either
