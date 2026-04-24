@@ -4,12 +4,16 @@ from __future__ import annotations
 import os
 from typing import Any
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 from caz_sentinel.model_loader import load_model_and_tokenizer
 from caz_sentinel.probe_library import ProbeLibrary
 from caz_sentinel.scorer import Scorer
+from caz_sentinel.openai_shapes import (
+    ChatCompletionRequest, build_pass_response, build_suppressed_response,
+)
+from caz_sentinel.types import Decision
 
 
 class AuditRequest(BaseModel):
@@ -61,6 +65,43 @@ def build_app() -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         audit_result, _ = scorer.score(text)
         return audit_result.to_dict()
+
+    @app.post("/v1/chat/completions")
+    def chat_completions(req: ChatCompletionRequest, response: Response) -> dict[str, Any]:
+        prompt = "\n".join(m.content for m in req.messages)
+        audit_result, past_kv = scorer.score(prompt)
+        response.headers["x-sentinel-request-id"] = audit_result.request_id
+        response.headers["x-sentinel-decision"] = audit_result.decision.value
+
+        prompt_tokens = tok(prompt, return_tensors="pt").input_ids.shape[1]
+
+        if audit_result.decision == Decision.SUPPRESSED:
+            return build_suppressed_response(
+                request_id=audit_result.request_id, model=req.model,
+                refusal=refusal, prompt_tokens=prompt_tokens,
+            ).model_dump()
+
+        # Pass path: generate with KV cache reuse.
+        input_ids = tok(prompt, return_tensors="pt").input_ids.to(device)
+        cache_position = torch.arange(input_ids.shape[1], device=device)
+        gen_kwargs: dict[str, Any] = dict(
+            past_key_values=past_kv,
+            cache_position=cache_position,
+            max_new_tokens=req.max_tokens or 128,
+            do_sample=req.temperature > 0.0,
+            temperature=max(req.temperature, 1e-5),
+            top_p=req.top_p,
+            pad_token_id=tok.eos_token_id,
+        )
+        with torch.no_grad():
+            out_ids = model.generate(input_ids, **gen_kwargs)
+        new_ids = out_ids[0, input_ids.shape[1]:]
+        completion_text = tok.decode(new_ids, skip_special_tokens=True)
+        return build_pass_response(
+            request_id=audit_result.request_id, model=req.model,
+            completion=completion_text, prompt_tokens=prompt_tokens,
+            completion_tokens=int(new_ids.shape[0]),
+        ).model_dump()
 
     return app
 
