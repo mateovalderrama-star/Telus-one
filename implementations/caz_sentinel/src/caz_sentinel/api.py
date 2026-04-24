@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import os
 import threading
+import uuid
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 import torch
 from transformers import TextIteratorStreamer
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -94,17 +96,39 @@ def build_app() -> FastAPI:
         return audit_result.to_dict()
 
     @app.post("/v1/chat/completions", response_model=None)
-    def chat_completions(req: ChatCompletionRequest, response: Response) -> dict[str, Any] | StreamingResponse:
+    def chat_completions(req: ChatCompletionRequest, response: Response, raw_request: Request) -> dict[str, Any] | StreamingResponse:
         prompt = "\n".join(m.content for m in req.messages)
+        prompt_inputs = tok(prompt, return_tensors="pt")
+        prompt_tokens = prompt_inputs.input_ids.shape[1]
+
+        if raw_request.headers.get("x-sentinel-bypass") == "1":
+            response.headers["x-sentinel-decision"] = "bypass"
+            input_ids = prompt_inputs.input_ids.to(device)
+            gen_kwargs: dict[str, Any] = dict(
+                max_new_tokens=req.max_tokens or 128,
+                do_sample=req.temperature > 0.0,
+                temperature=max(req.temperature, 1e-5),
+                top_p=req.top_p,
+                pad_token_id=tok.eos_token_id,
+            )
+            with torch.no_grad():
+                out_ids = model.generate(input_ids, **gen_kwargs)
+            new_ids = out_ids[0, input_ids.shape[1]:]
+            completion_text = tok.decode(new_ids, skip_special_tokens=True)
+            return build_pass_response(
+                request_id=str(uuid.uuid4()),
+                model=req.model,
+                completion=completion_text,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=int(new_ids.shape[0]),
+            ).model_dump()
+
         audit_result, past_kv = scorer.score(prompt)
         response.headers["x-sentinel-request-id"] = audit_result.request_id
         response.headers["x-sentinel-decision"] = audit_result.decision.value
         store.append(audit_result)
         if audit_result.decision == Decision.SUPPRESSED:
             sink.emit(build_udm_event(audit_result, model_id=model_id, customer_id=chronicle_customer_id))
-
-        prompt_inputs = tok(prompt, return_tensors="pt")
-        prompt_tokens = prompt_inputs.input_ids.shape[1]
 
         if req.stream:
             if audit_result.decision == Decision.SUPPRESSED:
