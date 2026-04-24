@@ -5,6 +5,7 @@ import os
 from typing import Any
 import torch
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from caz_sentinel.model_loader import load_model_and_tokenizer
@@ -13,6 +14,7 @@ from caz_sentinel.scorer import Scorer
 from caz_sentinel.openai_shapes import (
     ChatCompletionRequest, build_pass_response, build_suppressed_response,
 )
+from caz_sentinel.streaming import suppressed_stream, pass_stream
 from caz_sentinel.types import Decision
 
 
@@ -66,8 +68,8 @@ def build_app() -> FastAPI:
         audit_result, _ = scorer.score(text)
         return audit_result.to_dict()
 
-    @app.post("/v1/chat/completions")
-    def chat_completions(req: ChatCompletionRequest, response: Response) -> dict[str, Any]:
+    @app.post("/v1/chat/completions", response_model=None)
+    def chat_completions(req: ChatCompletionRequest, response: Response) -> dict[str, Any] | StreamingResponse:
         prompt = "\n".join(m.content for m in req.messages)
         audit_result, past_kv = scorer.score(prompt)
         response.headers["x-sentinel-request-id"] = audit_result.request_id
@@ -75,6 +77,27 @@ def build_app() -> FastAPI:
 
         prompt_inputs = tok(prompt, return_tensors="pt")
         prompt_tokens = prompt_inputs.input_ids.shape[1]
+
+        if req.stream:
+            if audit_result.decision == Decision.SUPPRESSED:
+                return StreamingResponse(
+                    iter(list(suppressed_stream(req.model, refusal))),
+                    media_type="text/event-stream",
+                )
+            # Pass + stream: iterate token-by-token via TextIteratorStreamer.
+            from transformers import TextIteratorStreamer
+            import threading
+            streamer = TextIteratorStreamer(tok, skip_prompt=True, skip_special_tokens=True)
+            input_ids = prompt_inputs.input_ids.to(device)
+            # Note: streaming doesn't use cache_position, so we must not use past_kv either
+            gen_kwargs = dict(
+                max_new_tokens=req.max_tokens or 128,
+                do_sample=req.temperature > 0.0, temperature=max(req.temperature, 1e-5),
+                top_p=req.top_p, pad_token_id=tok.eos_token_id, streamer=streamer,
+            )
+            thread = threading.Thread(target=model.generate, args=(input_ids,), kwargs=gen_kwargs, daemon=True)
+            thread.start()
+            return StreamingResponse(pass_stream(req.model, streamer), media_type="text/event-stream")
 
         if audit_result.decision == Decision.SUPPRESSED:
             return build_suppressed_response(

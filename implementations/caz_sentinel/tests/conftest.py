@@ -1,9 +1,12 @@
 """Shared pytest fixtures for CAZ Sentinel tests."""
 
 from pathlib import Path
+import subprocess
+import sys
 
 import numpy as np
 import pytest
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -55,3 +58,28 @@ def always_suppress_probe_dir(tmp_path: Path) -> Path:
             d_model=np.int64(512),
         )
     return d
+
+
+@pytest.fixture
+def client(monkeypatch, tmp_path):
+    """Client configured with seed-1 synthetic probes (low-scoring, typically pass)."""
+    subprocess.check_call([sys.executable, "-m", "caz_sentinel.scripts.build_synthetic_probes",
+                           "--out", str(tmp_path), "--model", "EleutherAI/pythia-70m", "--seed", "1"])
+    # Seed 1 keeps random directions low-scoring against typical prompts; safe for "pass" test.
+    monkeypatch.setenv("CAZ_SENTINEL_PROBE_DIR", str(tmp_path))
+    monkeypatch.setenv("CAZ_SENTINEL_MODEL_ID", "EleutherAI/pythia-70m")
+    monkeypatch.setenv("CAZ_SENTINEL_DEVICE", "cpu")
+    from caz_sentinel.api import build_app
+    return TestClient(build_app())
+
+
+@pytest.fixture
+def client_suppress(monkeypatch, always_suppress_probe_dir):
+    """Client configured with always-suppress probes."""
+    monkeypatch.setenv("CAZ_SENTINEL_PROBE_DIR", str(always_suppress_probe_dir))
+    monkeypatch.setenv("CAZ_SENTINEL_MODEL_ID", "EleutherAI/pythia-70m")
+    monkeypatch.setenv("CAZ_SENTINEL_DEVICE", "cpu")
+    monkeypatch.setenv("CAZ_SENTINEL_REFUSAL_MESSAGE", "BLOCKED")
+    from caz_sentinel.api import build_app
+
+    return TestClient(build_app())
