@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from caz_sentinel.model_loader import load_model_and_tokenizer
@@ -55,7 +55,11 @@ def build_app() -> FastAPI:
 
     @app.post("/v1/audit")
     def audit(req: AuditRequest) -> dict[str, Any]:
-        audit_result, _ = scorer.score(req.text())
+        try:
+            text = req.text()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        audit_result, _ = scorer.score(text)
         return audit_result.to_dict()
 
     return app
