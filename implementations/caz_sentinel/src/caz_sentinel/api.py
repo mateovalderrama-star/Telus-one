@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+from contextlib import asynccontextmanager
 from typing import Any
 import torch
 from transformers import TextIteratorStreamer
@@ -19,6 +20,7 @@ from caz_sentinel.openai_shapes import (
 )
 from caz_sentinel.streaming import suppressed_stream, pass_stream
 from caz_sentinel.types import Decision
+from caz_sentinel.chronicle_sink import ChronicleSink, NoopSink, build_udm_event
 
 
 class AuditRequest(BaseModel):
@@ -50,11 +52,27 @@ def build_app() -> FastAPI:
     scorer = Scorer(model=model, tokenizer=tok, library=library, device=device)
     store = AuditStore(audit_db)
 
-    app = FastAPI(title="CAZ Sentinel")
+    chronicle_endpoint = os.environ.get("CHRONICLE_ENDPOINT")
+    chronicle_customer_id = os.environ.get("CHRONICLE_CUSTOMER_ID", "")
+    sink: ChronicleSink | NoopSink = (
+        ChronicleSink(endpoint=chronicle_endpoint)
+        if chronicle_endpoint
+        else NoopSink()
+    )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        await sink.start()
+        yield
+        await sink.close()
+
+    app = FastAPI(title="CAZ Sentinel", lifespan=lifespan)
     app.state.scorer = scorer
     app.state.refusal = refusal
     app.state.model_id = model_id
     app.state.store = store
+    app.state.sink = sink
+    app.state.chronicle_customer_id = chronicle_customer_id
 
     @app.get("/v1/health")
     def health() -> dict[str, Any]:
@@ -82,6 +100,8 @@ def build_app() -> FastAPI:
         response.headers["x-sentinel-request-id"] = audit_result.request_id
         response.headers["x-sentinel-decision"] = audit_result.decision.value
         store.append(audit_result)
+        if audit_result.decision == Decision.SUPPRESSED:
+            sink.emit(build_udm_event(audit_result, model_id=model_id, customer_id=chronicle_customer_id))
 
         prompt_inputs = tok(prompt, return_tensors="pt")
         prompt_tokens = prompt_inputs.input_ids.shape[1]

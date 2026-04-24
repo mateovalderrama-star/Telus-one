@@ -1,7 +1,10 @@
 """Chronicle UDM event builder and async sink."""
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+import logging
+from typing import Any, Awaitable, Callable
+import httpx
 from caz_sentinel.types import AuditResult, Decision
 
 
@@ -38,3 +41,68 @@ def build_udm_event(a: AuditResult, *, model_id: str, customer_id: str) -> dict[
         ],
         "about": [{"labels": labels}],
     }
+
+
+log = logging.getLogger(__name__)
+
+
+class NoopSink:
+    def emit(self, event: dict[str, Any]) -> None:
+        pass
+
+    async def drain(self) -> None:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def close(self) -> None:
+        pass
+
+
+class ChronicleSink:
+    def __init__(
+        self, *, transport: Callable[[dict], Awaitable[None]] | None = None,
+        endpoint: str | None = None, max_queue: int = 1000,
+    ) -> None:
+        self._queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=max_queue)
+        self._task: asyncio.Task | None = None
+        self._endpoint = endpoint
+        self._transport = transport or self._http_transport
+        self._client: httpx.AsyncClient | None = None
+
+    async def _http_transport(self, event: dict) -> None:
+        assert self._endpoint is not None
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=5.0)
+        r = await self._client.post(self._endpoint, json={"events": [event]})
+        if r.status_code >= 400:
+            log.warning("chronicle emit failed: %s %s", r.status_code, r.text[:200])
+
+    async def start(self) -> None:
+        self._task = asyncio.create_task(self._worker())
+
+    async def _worker(self) -> None:
+        while True:
+            event = await self._queue.get()
+            try:
+                await self._transport(event)
+            except Exception:
+                log.exception("chronicle transport error (dropped)")
+            finally:
+                self._queue.task_done()
+
+    def emit(self, event: dict[str, Any]) -> None:
+        try:
+            self._queue.put_nowait(event)
+        except asyncio.QueueFull:
+            log.warning("chronicle queue full; dropping event")
+
+    async def drain(self) -> None:
+        await self._queue.join()
+
+    async def close(self) -> None:
+        if self._task:
+            self._task.cancel()
+        if self._client:
+            await self._client.aclose()
