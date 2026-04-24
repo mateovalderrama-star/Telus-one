@@ -34,6 +34,22 @@ agentic-xai-eval = [
     "openinference-instrumentation-openai>=0.1.0",
     "streamlit>=1.55.0",
 ]
+caz-sentinel = [
+    "caz-sentinel",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=2.1",
+    "pydantic>=2.8",
+    "transformers>=4.44",
+    "torch>=2.3",
+    "accelerate>=0.29.3",
+    "safetensors>=0.4",
+    "numpy>=1.26",
+    "httpx>=0.27",
+    "streamlit>=1.37",
+    "pytest-asyncio>=0.23",
+    "rosetta-tools",
+]
 dev = [
     "aieng-platform-onboard>=0.6.3",
     "codecov>=2.1.13",
@@ -89,6 +105,7 @@ xai-refresher = [
 [tool.uv.workspace]
 members = [
   "aieng-llm-interp",
+  "implementations/caz_sentinel",
 ]
 
 [tool.uv]
@@ -113,10 +130,12 @@ override-dependencies = [
 
 [tool.uv.sources]
 aieng-llm-interp = { workspace = true }
+caz-sentinel = { workspace = true }
 lore-sa = { git = "https://github.com/kdd-lab/LORE_sa.git", rev = "abaa480451cd520d659f385d98ecd692d52c66e4" }
 xl-vlm = { git = "https://github.com/mshukor/xl-vlms.git", rev = "3bd525b070066a52ad974b1ba1c5c206342cb708" }
 language-evaluation = { git = "https://github.com/bckim92/language-evaluation.git" }
 imagebind = { git = "https://github.com/facebookresearch/ImageBind.git", rev = "53680b02d7e37b19b124fa37bae4b6c98c38f5be" }
+rosetta-tools = { git = "https://github.com/jamesrahenry/Rosetta_Tools.git" }
 
 [tool.ruff]
 include = ["*.py", "pyproject.toml", "*.ipynb"]
