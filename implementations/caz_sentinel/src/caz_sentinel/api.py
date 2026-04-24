@@ -73,7 +73,8 @@ def build_app() -> FastAPI:
         response.headers["x-sentinel-request-id"] = audit_result.request_id
         response.headers["x-sentinel-decision"] = audit_result.decision.value
 
-        prompt_tokens = tok(prompt, return_tensors="pt").input_ids.shape[1]
+        prompt_inputs = tok(prompt, return_tensors="pt")
+        prompt_tokens = prompt_inputs.input_ids.shape[1]
 
         if audit_result.decision == Decision.SUPPRESSED:
             return build_suppressed_response(
@@ -82,7 +83,7 @@ def build_app() -> FastAPI:
             ).model_dump()
 
         # Pass path: generate with KV cache reuse.
-        input_ids = tok(prompt, return_tensors="pt").input_ids.to(device)
+        input_ids = prompt_inputs.input_ids.to(device)
         cache_position = torch.arange(input_ids.shape[1], device=device)
         gen_kwargs: dict[str, Any] = dict(
             past_key_values=past_kv,
