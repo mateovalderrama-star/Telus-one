@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from caz_sentinel.audit_store import AuditStore
 from caz_sentinel.model_loader import load_model_and_tokenizer
 from caz_sentinel.probe_library import ProbeLibrary
 from caz_sentinel.scorer import Scorer
@@ -42,15 +43,18 @@ def build_app() -> FastAPI:
     device = os.environ.get("CAZ_SENTINEL_DEVICE", "cuda")
     refusal = os.environ.get("CAZ_SENTINEL_REFUSAL_MESSAGE",
                              "This request was blocked by the CAZ Sentinel policy.")
+    audit_db = os.environ.get("CAZ_SENTINEL_AUDIT_DB", "caz_sentinel_audit.db")
 
     library = ProbeLibrary.load(probe_dir)
     model, tok = load_model_and_tokenizer(model_id, dtype=_resolve_dtype(device), device=device)
     scorer = Scorer(model=model, tokenizer=tok, library=library, device=device)
+    store = AuditStore(audit_db)
 
     app = FastAPI(title="CAZ Sentinel")
     app.state.scorer = scorer
     app.state.refusal = refusal
     app.state.model_id = model_id
+    app.state.store = store
 
     @app.get("/v1/health")
     def health() -> dict[str, Any]:
@@ -68,6 +72,7 @@ def build_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         audit_result, _ = scorer.score(text)
+        store.append(audit_result)
         return audit_result.to_dict()
 
     @app.post("/v1/chat/completions", response_model=None)
@@ -76,6 +81,7 @@ def build_app() -> FastAPI:
         audit_result, past_kv = scorer.score(prompt)
         response.headers["x-sentinel-request-id"] = audit_result.request_id
         response.headers["x-sentinel-decision"] = audit_result.decision.value
+        store.append(audit_result)
 
         prompt_inputs = tok(prompt, return_tensors="pt")
         prompt_tokens = prompt_inputs.input_ids.shape[1]
@@ -126,6 +132,17 @@ def build_app() -> FastAPI:
             completion=completion_text, prompt_tokens=prompt_tokens,
             completion_tokens=int(new_ids.shape[0]),
         ).model_dump()
+
+    @app.get("/v1/audit/{request_id}")
+    def get_audit(request_id: str) -> dict[str, Any]:
+        result = store.get(request_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return result.to_dict()
+
+    @app.get("/v1/audit")
+    def list_audits(limit: int = 100) -> list[dict[str, Any]]:
+        return [a.to_dict() for a in store.list(limit=limit)]
 
     return app
 
