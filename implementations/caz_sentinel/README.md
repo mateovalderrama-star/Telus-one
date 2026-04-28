@@ -38,18 +38,18 @@ Streaming requests that pass the guard do not benefit from KV cache reuse (limit
 
 ```bash
 # Install dependencies
-uv sync --group dev
-
-# Build a synthetic 9-probe fixture (uses pythia-70m — no GPU required)
-uv run python implementations/caz_sentinel/scripts/build_synthetic_probes.py
+uv sync --group caz-sentinel
 
 # Set environment variables
 export CAZ_SENTINEL_PROBE_DIR=implementations/caz_sentinel/tests/fixtures/synthetic_probes
 export CAZ_SENTINEL_MODEL_ID=EleutherAI/pythia-70m
-export CAZ_SENTINEL_DEVICE=cpu
+export CAZ_SENTINEL_DEVICE=cuda
+
+# Build a synthetic 9-probe fixture (uses pythia-70m — no GPU required)
+uv run python implementations/caz_sentinel/scripts/build_synthetic_probes.py --out $CAZ_SENTINEL_PROBE_DIR
 
 # Start the service
-uvicorn caz_sentinel.api:app --factory --host 0.0.0.0 --port 8000
+uv run uvicorn caz_sentinel.api:build_app --factory --host 0.0.0.0 --port 8000
 ```
 
 ## Endpoints
@@ -188,13 +188,11 @@ uv run pytest implementations/caz_sentinel/tests/
 ### Development server
 
 ```bash
-# Auto-reload on file changes
-cd implementations/caz_sentinel
-CAZ_SENTINEL_EAGER=1 \
-  CAZ_SENTINEL_PROBE_DIR=tests/fixtures/synthetic_probes \
+# Auto-reload on file changes (from repo root)
+CAZ_SENTINEL_PROBE_DIR=implementations/caz_sentinel/tests/fixtures/synthetic_probes \
   CAZ_SENTINEL_MODEL_ID=EleutherAI/pythia-70m \
-  CAZ_SENTINEL_DEVICE=cpu \
-  uvicorn caz_sentinel.api:app --reload --host 0.0.0.0 --port 8000
+  CAZ_SENTINEL_DEVICE=cuda \
+  uv run uvicorn caz_sentinel.api:build_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Implementation notes
